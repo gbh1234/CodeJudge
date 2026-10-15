@@ -1,0 +1,2871 @@
+<!doctype html>
+<html lang="en" data-visualize-standalone>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>EvoAgent 完整审查流程与 Checkpoint 恢复</title>
+<style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0}body{box-sizing:border-box;padding:1rem;background:inherit}iframe{display:block;width:100%;height:calc(100vh - 2rem);margin:0 auto;border:0}</style>
+</head>
+<body>
+<iframe id="codex-visualization" sandbox="allow-scripts" referrerpolicy="no-referrer" title="EvoAgent 完整审查流程与 Checkpoint 恢复" data-srcdoc="&lt;!doctype html&gt;
+&lt;html lang=&quot;en&quot; data-visualize-standalone&gt;
+&lt;head&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
+&lt;meta name=&quot;referrer&quot; content=&quot;no-referrer&quot;&gt;
+&lt;meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;default-src &#x27;none&#x27;; script-src &#x27;unsafe-inline&#x27; &#x27;unsafe-eval&#x27; &#x27;wasm-unsafe-eval&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src &#x27;unsafe-inline&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;&quot;&gt;
+&lt;title&gt;EvoAgent 完整审查流程与 Checkpoint 恢复&lt;/title&gt;
+&lt;style&gt;:root {
+  color-scheme: light dark;
+  background-color: var(
+    --background,
+    var(--color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)))
+  ) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: var(
+    --color-background-primary,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --card: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --card-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --popover: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255), rgb(45 45 45))
+  );
+  --popover-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --primary: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --primary-foreground: var(
+    --color-text-inverse,
+    light-dark(rgb(255 255 255), rgb(13 13 13))
+  );
+  --secondary: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%))
+  );
+  --secondary-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: var(
+    --color-text-secondary,
+    light-dark(rgb(26 28 31 / 49.4%), rgb(255 255 255 / 49.8%))
+  );
+  --accent: var(
+    --color-background-info,
+    light-dark(rgb(229 242 255), rgb(13 39 63))
+  );
+  --accent-foreground: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --destructive: var(
+    --color-text-warning,
+    light-dark(rgb(226 85 7), rgb(255 133 73))
+  );
+  --border: var(
+    --color-border-secondary,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+  --input: var(
+    --color-border-primary,
+    light-dark(
+      rgb(26 28 31 / 11.8%),
+      color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+    )
+  );
+  --ring: var(
+    --color-ring-primary,
+    light-dark(rgb(51 156 255), rgb(131 195 255 / 76%))
+  );
+  --font-size-base: var(--font-text-md-size, 16px);
+  --blue: light-dark(rgb(51 156 255), rgb(51 156 255));
+  --orange: light-dark(rgb(226 85 7), rgb(251 106 34));
+  --green: light-dark(rgb(0 162 64), rgb(64 201 119));
+  --red: light-dark(rgb(224 46 42), rgb(255 103 100));
+  --purple: light-dark(rgb(146 79 247), rgb(173 123 249));
+  --yellow: light-dark(rgb(255 195 0), rgb(255 210 64));
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans:
+    -apple-system-body, ui-sans-serif, -apple-system, system-ui, &quot;Segoe UI&quot;,
+    Helvetica, &quot;Apple Color Emoji&quot;, Arial, sans-serif, &quot;Segoe UI Emoji&quot;,
+    &quot;Segoe UI Symbol&quot;;
+  --font-mono:
+    ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;,
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --icon-size: 16px;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --corner-shape: round;
+  --radius: var(--border-radius-lg, 8px);
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 2);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url(&quot;data:image/svg+xml,%3Csvg xmlns=&#x27;http://www.w3.org/2000/svg&#x27; viewBox=&#x27;0 0 17 17&#x27;%3E%3Cpath d=&#x27;M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z&#x27;/%3E%3C/svg%3E&quot;);
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+}
+
+:root[data-theme=&quot;light&quot;] {
+  color-scheme: light;
+}
+
+:root[data-theme=&quot;dark&quot;] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html &gt; body {
+  /* Preserve MCP aliases for older inline renderers without creating :root cycles. */
+  --color-background-primary: var(
+    --background,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --color-text-primary: var(
+    --foreground,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --color-border-secondary: var(
+    --border,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+
+  margin: 0;
+  padding: var(--visualize-paint-gutter, 0px);
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans) !important;
+  -webkit-font-smoothing: antialiased;
+  font-size: var(--font-size-base);
+  line-height: calc(var(--font-size-base) * 1.625);
+  font-weight: var(--font-weight-normal);
+}
+
+.cursor-interaction {
+  cursor: var(--cursor-interaction, pointer);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: var(--cursor-interaction, pointer);
+  text-decoration: none;
+  text-underline-offset: 2px;
+  font-weight: inherit;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+li,
+.table {
+  font-family: var(--font-sans);
+}
+
+h1 {
+  font-size: calc(var(--font-size-base) * 1.5);
+  line-height: 1.3333333333;
+}
+
+h2 {
+  font-size: calc(var(--font-size-base) * 1.25);
+  line-height: 1.4;
+}
+h3 {
+  font-size: calc(var(--font-size-base) * 1.125);
+  line-height: 1.5555555556;
+}
+h4 {
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+}
+h5,
+h6 {
+  font-size: var(--font-size-base);
+  line-height: calc(var(--font-size-base) * 1.625);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+b,
+strong,
+th {
+  font-weight: 600;
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: var(--corner-shape);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+pre,
+pre code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.table {
+  width: 100%;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: calc(var(--font-size-base) * 0.875);
+  line-height: calc(var(--font-size-base) * 1.625);
+  font-family: var(--font-sans);
+}
+
+.table :is(th, td) {
+  padding-block: 10px;
+  padding-inline: 0 24px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+  border-bottom-color: color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+.table :is(th, td):not(:last-child) {
+  padding-inline-end: calc(var(--font-size-base) * 1.5);
+}
+
+.table-responsive &gt; .table :is(th, td) {
+  overflow-wrap: break-word;
+}
+
+.table :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.table :is(caption, thead th) {
+  font-weight: 600;
+}
+
+.table thead :is(th, td) {
+  border-bottom-color: var(--border-strong, var(--input));
+  padding-block: calc(var(--font-size-base) / 2);
+  line-height: var(--font-size-base);
+}
+
+.table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+.table tbody :is(th, td) {
+  padding-block: calc(var(--font-size-base) * 0.625);
+}
+
+.table.table-sm :is(th, td) {
+  padding-block: 8px;
+}
+
+.table.table-sm :is(th, td):not(:last-child) {
+  padding-inline-end: 16px;
+}
+
+.table :is(.text-end, [align=&quot;right&quot;]) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.table :is(.text-center, [align=&quot;center&quot;]) {
+  text-align: center;
+}
+
+.table .text-nowrap {
+  white-space: nowrap;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: var(--corner-shape);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+.widget {
+  min-width: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  box-shadow: 0 0 0 0.5px var(--border-strong, var(--border));
+  color: var(--foreground);
+  background: var(--background);
+}
+
+#widget &gt; :not(.card, .widget, .progress) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  border: 1px solid var(--border);
+  corner-shape: var(--corner-shape);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+  font-family: var(--font-sans);
+  padding: 5px 12px;
+  border-color: color-mix(
+    in oklab,
+    light-dark(var(--primary-foreground), var(--foreground)) 5%,
+    transparent
+  );
+  border-radius: var(--radius-2xl);
+  color: light-dark(var(--primary-foreground), var(--foreground));
+  background: light-dark(var(--foreground), var(--popover));
+  box-shadow: 0 8px 18px rgb(15 23 42 / 20%);
+  letter-spacing: -0.15px;
+  font-size: calc(var(--font-size-base) * 14 / 16);
+  font-size: round(nearest, calc(var(--font-size-base) * 14 / 16), 1px);
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+hr {
+  width: 100%;
+  height: 1px;
+  margin-block: 6px;
+  border: 0;
+  background: var(--border);
+}
+
+.nav {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.progress {
+  display: flex;
+  height: 8px;
+  margin-block: calc((var(--line-height-normal, 1.5em) - 8px) / 2);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+}
+
+.progress-bar:only-child {
+  border-radius: var(--radius-full);
+}
+
+.progress-bar {
+  height: 100%;
+  flex-shrink: 0;
+  border: 0;
+  background: var(--viz-series-1);
+}
+
+.viz-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  color: color-mix(in srgb, var(--foreground) 40%, var(--muted-foreground));
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+  font-family: var(--font-sans);
+  font-size: calc(var(--font-size-base) * 14 / 16);
+  font-size: round(nearest, calc(var(--font-size-base) * 14 / 16), 1px);
+  font-weight: var(--font-weight-normal);
+  line-height: 1;
+}
+
+small,
+.text-small {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls &gt; .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls &gt; .form-label &gt; :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.nav-link,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+/* Match inline alignment without overriding a containing flex or grid layout. */
+.btn,
+.nav-link,
+.form-control,
+.form-select,
+.form-range,
+.form-check {
+  vertical-align: middle;
+}
+
+.btn,
+.nav-link {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  corner-shape: var(--corner-shape);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: inherit;
+  font-family: var(--font-sans);
+  height: fit-content;
+  min-height: calc(12px + 2 * var(--control-spacing, 12px));
+  padding-inline: var(--control-spacing, 12px);
+  border-color: transparent;
+  border-radius: var(--radius-full);
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+  font-size: calc(var(--font-size-base) * 14 / 16);
+  font-size: round(nearest, calc(var(--font-size-base) * 14 / 16), 1px);
+  font-weight: var(--font-weight-normal);
+  line-height: 18px;
+}
+
+.btn {
+  border-color: var(--border);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: var(--cursor-interaction, pointer);
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover {
+  background: light-dark(
+    color-mix(in srgb, var(--foreground) 5.5%, transparent),
+    color-mix(in srgb, var(--foreground) 8%, transparent)
+  );
+}
+
+.nav-link:not(:disabled):not([aria-disabled=&quot;true&quot;]):hover {
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+
+.btn-primary {
+  border-color: var(--border);
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: border-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: border-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--muted-foreground);
+  background: light-dark(
+    color-mix(in srgb, var(--foreground) 5.5%, transparent),
+    color-mix(in srgb, var(--foreground) 8%, transparent)
+  );
+}
+
+.nav-pills .nav-link {
+  min-width: 0;
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.nav-justified .nav-link {
+  flex: 1 1 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.nav-pills .nav-link.active {
+  color: var(--foreground);
+  background: var(--muted);
+}
+
+/* Shared preview chrome; product styles stay inside each variant. */
+.viz-dotted-background {
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--foreground) 14%, transparent) 0.8px,
+    transparent 0.8px
+  );
+  background-position: center;
+  background-size: 16px 16px;
+}
+
+.viz-carousel {
+  position: relative;
+  min-width: 0;
+}
+
+.viz-carousel:has(&gt; .viz-carousel-controls) {
+  min-height: calc(60px + var(--viz-carousel-picker-height, 0px));
+  padding-bottom: 60px;
+}
+
+.viz-carousel &gt; [data-variant][hidden] {
+  display: none !important;
+}
+
+.viz-carousel &gt; [data-variant] {
+  isolation: isolate;
+}
+
+.viz-carousel-controls {
+  --viz-carousel-hover: light-dark(
+    color-mix(in srgb, var(--foreground) 5.4%, transparent),
+    color-mix(in srgb, var(--foreground) 7.8%, transparent)
+  );
+  position: absolute;
+  z-index: 2;
+  bottom: 8px;
+  left: 50%;
+  display: flex;
+  width: max-content;
+  /* Leave room for the host&#x27;s design-controls launcher at the trailing edge. */
+  max-width: calc(100% - 96px);
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-sans);
+  /* Match the settings dropdown chrome independently of the content font size. */
+  font-size: 13px;
+  font-weight: var(--font-weight-normal);
+  line-height: 18px;
+  transform: translateX(-50%);
+  user-select: none;
+}
+
+/* Keep authored mockup button styles out of the shared carousel chrome. */
+.viz-carousel-controls button,
+.viz-carousel-picker &gt; summary {
+  display: flex !important;
+  height: auto !important;
+  min-height: 30px;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px;
+  padding: 0 6px !important;
+  -webkit-app-region: no-drag;
+  border: 0 !important;
+  border-radius: 14px !important;
+  color: inherit !important;
+  background: transparent !important;
+  font: inherit !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.viz-carousel-controls &gt; button,
+.viz-carousel-picker &gt; summary {
+  position: relative;
+  isolation: isolate;
+}
+
+.viz-carousel-controls &gt; button {
+  --icon-size: 16px;
+  width: 30px !important;
+  padding: 0 !important;
+}
+
+.viz-carousel-picker &gt; summary {
+  padding-inline: 12px !important;
+}
+
+.viz-carousel-controls .viz-carousel-caret {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin: 0;
+  color: inherit;
+  transform: rotate(180deg);
+}
+
+.viz-carousel-controls &gt; button &gt; svg,
+.viz-carousel-controls .viz-carousel-caret,
+.viz-carousel-count {
+  opacity: 0.5;
+}
+
+.viz-carousel-controls &gt; button::before,
+.viz-carousel-picker &gt; summary::before {
+  position: absolute;
+  z-index: -1;
+  inset: 3px;
+  border-radius: 12px;
+  content: &quot;&quot;;
+  pointer-events: none;
+}
+
+.viz-carousel-controls &gt; button:hover::before,
+.viz-carousel-picker &gt; summary:hover::before {
+  background: var(--viz-carousel-hover);
+}
+
+.viz-carousel-controls &gt; button,
+.viz-carousel-controls [data-lucide],
+.viz-carousel-controls .lucide {
+  flex-shrink: 0;
+}
+
+.viz-carousel-picker {
+  min-width: 0;
+}
+
+.viz-carousel-picker &gt; summary {
+  min-width: 0;
+  list-style: none;
+}
+
+.viz-carousel-picker &gt; summary::-webkit-details-marker {
+  display: none;
+}
+
+.viz-carousel-count {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.viz-carousel-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viz-carousel-options {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 4px);
+  left: 0;
+  display: flex;
+  max-height: 240px;
+  flex-direction: column;
+  gap: 2px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--background);
+  box-shadow: 0 4px 12px light-dark(rgb(0 0 0 / 6%), rgb(0 0 0 / 25%));
+}
+
+.viz-carousel-options &gt; button {
+  border-radius: max(0px, calc(var(--radius-lg) - 5px)) !important;
+  width: 100% !important;
+  min-height: 28px;
+  justify-content: flex-start !important;
+  padding: 4px 8px !important;
+  font-size: var(--font-size-small) !important;
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.viz-carousel-options &gt; [aria-current=&quot;true&quot;],
+.viz-carousel-options &gt; button:hover {
+  background: var(--viz-carousel-hover) !important;
+}
+
+.btn:disabled,
+.nav-link:disabled,
+.nav-link[aria-disabled=&quot;true&quot;] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  corner-shape: var(--corner-shape);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  height: calc(12px + 2 * var(--control-spacing, 12px));
+  min-height: calc(12px + 2 * var(--control-spacing, 12px));
+  padding-inline: calc(4px + var(--control-spacing, 12px) / 2);
+  border-color: var(--input);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--popover) 96%, transparent);
+  font-size: calc(var(--font-size-base) * 14 / 16);
+  font-size: round(nearest, calc(var(--font-size-base) * 14 / 16), 1px);
+  font-weight: var(--font-weight-normal);
+  line-height: 1.4285714286;
+}
+.form-control:is(
+  [type=&quot;file&quot;],
+  [type=&quot;date&quot;],
+  [type=&quot;datetime-local&quot;],
+  [type=&quot;month&quot;],
+  [type=&quot;week&quot;],
+  [type=&quot;color&quot;]
+) {
+  height: calc(12px + 2 * var(--control-spacing, 12px));
+  min-height: calc(12px + 2 * var(--control-spacing, 12px));
+  line-height: 18px;
+}
+.form-control:is(
+  [type=&quot;date&quot;],
+  [type=&quot;datetime-local&quot;],
+  [type=&quot;month&quot;],
+  [type=&quot;week&quot;]
+) {
+  padding-inline: var(--control-spacing, 12px);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type=&quot;file&quot;] {
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+  padding: 0;
+}
+
+.form-control[type=&quot;file&quot;]::file-selector-button {
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+  min-height: calc(10px + 2 * var(--control-spacing, 12px));
+  padding-inline: var(--control-spacing, 12px);
+  margin-inline-end: var(--control-spacing, 12px);
+}
+
+.form-control[type=&quot;file&quot;]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type=&quot;color&quot;] {
+  width: 40px;
+  height: calc(12px + 2 * var(--control-spacing, 12px));
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: var(--corner-shape);
+}
+
+textarea.form-control {
+  height: auto;
+  resize: vertical;
+  min-height: 96px;
+  padding: 8px 10px;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: none;
+}
+.form-control:disabled {
+  color: var(--muted-foreground);
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+  opacity: 1;
+}
+.form-control[aria-invalid=&quot;true&quot;] {
+  border-color: var(--red);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--red) 20%, transparent);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: fit-content;
+  min-height: calc(12px + 2 * var(--control-spacing, 12px));
+  margin: 0;
+  /* The secondary icon role is 14px at compact density and 16px at web density. */
+  --icon-size: calc(10px + var(--control-spacing, 12px) / 2);
+  /* Settings dropdowns retain a 12px inset and a 4px text-to-chevron gap. */
+  padding: 0 calc(16px + var(--icon-size)) 0 12px;
+  outline: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  corner-shape: var(--corner-shape);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(
+      45deg,
+      transparent calc(50% - 0.6px),
+      var(--muted-foreground) calc(50% - 0.6px) calc(50% + 0.6px),
+      transparent calc(50% + 0.6px)
+    ),
+    linear-gradient(
+      135deg,
+      transparent calc(50% - 0.6px),
+      var(--muted-foreground) calc(50% - 0.6px) calc(50% + 0.6px),
+      transparent calc(50% + 0.6px)
+    );
+  background-position:
+    calc(100% - 12px - var(--icon-size) / 2) 50%,
+    calc(100% - 12px - var(--icon-size) * 0.18) 50%;
+  background-repeat: no-repeat;
+  background-size: calc(var(--icon-size) * 0.32) calc(var(--icon-size) * 0.32);
+  cursor: var(--cursor-interaction, default);
+  font-size: calc(var(--font-size-base) * 14 / 16);
+  font-size: round(nearest, calc(var(--font-size-base) * 14 / 16), 1px);
+  font-weight: var(--font-weight-normal);
+  line-height: 18px;
+}
+
+.form-select:not(:disabled):hover {
+  background-color: light-dark(
+    color-mix(in srgb, var(--foreground) 5.5%, transparent),
+    color-mix(in srgb, var(--foreground) 8%, transparent)
+  );
+}
+
+.form-select:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+.form-select:disabled {
+  opacity: 0.4;
+}
+
+.form-check {
+  display: flex;
+  min-height: calc(12px + 2 * var(--control-spacing, 12px));
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;] {
+  corner-shape: round;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  width: calc(10px + var(--control-spacing, 12px) / 2);
+  height: calc(10px + var(--control-spacing, 12px) / 2);
+  border-color: var(--border-strong, var(--input));
+  border-radius: calc(var(--radius-sm) / 2);
+  background-color: transparent;
+  color: var(--foreground);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type=&quot;checkbox&quot;]:is(:checked, :indeterminate) {
+  border-color: var(--border-strong, var(--input));
+  background-color: color-mix(in srgb, var(--popover) 96%, transparent);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type=&quot;checkbox&quot;]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: &quot;&quot;;
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+  background-color: var(--foreground);
+}
+.form-check:not(.form-switch)
+  .form-check-input[type=&quot;checkbox&quot;]:indeterminate::before {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 65%;
+  height: 6.65%;
+  margin: auto;
+  border-radius: var(--radius-full);
+  background: var(--foreground);
+  mask: none;
+  content: &quot;&quot;;
+}
+
+.form-check-input[type=&quot;radio&quot;] {
+  border-radius: var(--radius-full);
+  width: 16px;
+  height: 16px;
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--input);
+}
+
+.form-check-input[type=&quot;radio&quot;]:checked {
+  border: 0;
+  background: radial-gradient(
+    circle,
+    var(--primary-foreground) 0 3px,
+    var(--foreground) 3px
+  );
+  box-shadow: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;]:focus-visible {
+  border-color: var(--ring);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+.form-check:not(.form-switch) .form-check-input[type=&quot;radio&quot;]:disabled,
+.form-check:not(.form-switch)
+  .form-check-input[type=&quot;radio&quot;]:disabled
+  + .form-check-label {
+  opacity: 0.5;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-sm);
+  content: &quot;&quot;;
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+  border-color: #fff;
+  background: #fff;
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--blue);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+  outline: none;
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  accent-color: var(--primary);
+  height: calc(12px + 2 * var(--control-spacing, 12px));
+  min-height: calc(12px + 2 * var(--control-spacing, 12px));
+  outline: none;
+  border-radius: var(--radius-full);
+  color: var(--foreground);
+  background: transparent;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  background: var(--form-range-track, var(--border));
+  height: 2px;
+  border-radius: var(--radius-full);
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  margin-top: -9px;
+  border-color: transparent;
+  background: currentColor;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Outline the native track and thumb, preserving the larger input hit area. */
+.form-range:focus-visible::-webkit-slider-runnable-track {
+  outline: 2px auto Highlight;
+  outline-color: -webkit-focus-ring-color;
+}
+
+.form-range::-moz-range-track {
+  background: var(--form-range-track, var(--border));
+  height: 2px;
+  border-radius: var(--radius-full);
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  border-color: transparent;
+  background: currentColor;
+  box-shadow: var(--shadow-sm);
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  outline: 2px solid Highlight;
+  outline-offset: 2px;
+}
+
+.form-range:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+  [aria-pressed=&quot;true&quot;],
+  [aria-selected=&quot;true&quot;],
+  .is-selected
+) {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--blue);
+}
+
+.btn.viz-tile:is([aria-pressed=&quot;true&quot;], [aria-selected=&quot;true&quot;], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible,
+.nav-link:focus-visible {
+  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.viz-carousel-controls :is(button, summary):focus-visible {
+  outline: 2px solid var(--ring) !important;
+  outline-offset: 2px !important;
+}
+
+/* Web recipes are the default, including on renderers without inline style queries. */
+@supports (border-radius: if(style(--corner-shape: round): 1px; else: 2px)) {
+  /* Match the host&#x27;s proportional text-sm scale at every text preference. */
+  .tooltip,
+  .viz-badge,
+  .btn,
+  .nav-link,
+  .form-control,
+  .form-select {
+    font-size: if(
+      style(--corner-shape: round): round(
+          nearest,
+          calc(var(--font-size-base) * 14 / 16),
+          1px
+        );
+        else: round(nearest, calc(var(--font-size-base) * 13 / 14), 1px)
+    );
+  }
+
+  .btn,
+  .nav-link,
+  .form-select {
+    border-radius: if(
+      style(--corner-shape: round): var(--radius-full); else: var(--radius-lg)
+    );
+  }
+
+  .form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;] {
+    border-radius: if(
+      style(--corner-shape: round): calc(var(--radius-sm) / 2);
+        else: calc(var(--radius-lg) * 0.4)
+    );
+  }
+
+  .tooltip {
+    font-weight: if(
+      style(--corner-shape: round): 600; else: var(--font-weight-normal)
+    );
+  }
+}
+
+@media (pointer: coarse) {
+  .viz-carousel:has(&gt; .viz-carousel-controls) {
+    min-height: calc(76px + var(--viz-carousel-picker-height, 0px));
+    padding-bottom: 76px;
+  }
+
+  .btn,
+  .nav-link,
+  .viz-carousel-controls button,
+  .viz-carousel-picker &gt; summary,
+  .form-control,
+  .form-select {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Keep small-screen WebKit from zooming when a text field receives focus. */
+  .form-control,
+  .form-select {
+    font-size: max(16px, calc(var(--font-size-base) * 14 / 16));
+    font-size: max(
+      16px,
+      round(nearest, calc(var(--font-size-base) * 14 / 16), 1px)
+    );
+  }
+  .form-control:is(
+    [type=&quot;file&quot;],
+    [type=&quot;date&quot;],
+    [type=&quot;datetime-local&quot;],
+    [type=&quot;month&quot;],
+    [type=&quot;week&quot;],
+    [type=&quot;time&quot;],
+    [type=&quot;color&quot;]
+  ) {
+    height: 44px;
+    min-height: 44px;
+    font-size: max(16px, calc(var(--font-size-base) * 14 / 16));
+    font-size: max(
+      16px,
+      round(nearest, calc(var(--font-size-base) * 14 / 16), 1px)
+    );
+  }
+
+  .form-control[type=&quot;file&quot;]::file-selector-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .form-control-color[type=&quot;color&quot;] {
+    width: 44px;
+    height: 44px;
+  }
+
+  .form-control:is(
+    [type=&quot;date&quot;],
+    [type=&quot;datetime-local&quot;],
+    [type=&quot;month&quot;],
+    [type=&quot;time&quot;],
+    [type=&quot;week&quot;]
+  ) {
+    min-width: 0;
+    max-width: 100%;
+    padding-block: 8px;
+  }
+
+  .form-check {
+    min-height: 44px;
+    padding-inline: 15px;
+  }
+
+  .form-check-input {
+    position: relative;
+  }
+
+  .form-check-input::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    content: &quot;&quot;;
+    transform: translate(-50%, -50%);
+  }
+
+  .form-check-label {
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .form-range {
+    height: 44px;
+    touch-action: pan-y;
+  }
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget &gt; svg {
+  width: 100%;
+}
+
+/* Model-authored chart rules can otherwise stretch icons after these styles load. */
+svg.lucide {
+  display: block;
+  width: var(--icon-size) !important;
+  height: var(--icon-size) !important;
+  flex: none;
+  margin: 0 !important;
+  stroke-width: 1.6;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html&gt;body{padding:0}&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;script type=&quot;application/json&quot; id=&quot;codex-visualization-widget-state&quot;&gt;__CODEX_VISUALIZATION_WIDGET_STATE__&lt;/script&gt;
+&lt;script&gt;(() =&gt; {
+  const root = document.documentElement;
+  const mediaQuery = globalThis.matchMedia(&quot;(prefers-color-scheme: dark)&quot;);
+  const apply = Reflect.apply;
+  const isArray = Array.isArray;
+  const hasOwn = Object.hasOwn;
+  const parentWindow = globalThis.parent;
+  const stringify = JSON.stringify;
+  const parse = JSON.parse;
+  const encode = TextEncoder.prototype.encode.bind(new TextEncoder());
+  const initialStateElement = document.getElementById(
+    &quot;codex-visualization-widget-state&quot;,
+  );
+  const initialGlobals = parse(initialStateElement?.textContent ?? &quot;{}&quot;);
+  initialStateElement?.remove();
+  /** @type {Record&lt;string, unknown&gt; | null} */
+  let state = initialGlobals.widgetState ?? null;
+  const statePersistence = initialGlobals.statePersistence ?? &quot;none&quot;;
+  let nextStateRequestId = 0;
+  /** @type {Map&lt;number, { resolve: () =&gt; void; reject: (error: Error) =&gt; void; timeout: ReturnType&lt;typeof globalThis.setTimeout&gt;; serializedState: string }&gt;} */
+  const pendingStateWrites = new Map();
+  const persistenceError = () =&gt;
+    Object.assign(
+      new Error(&quot;The host could not persist the widget state update&quot;),
+      {
+        code: -32000,
+        data: { code: &quot;widget_state_persistence_failed&quot;, retryable: false },
+      },
+    );
+  /**
+   * @param {object} prototype
+   * @param {string} property
+   */
+  const getPrototypeGetter = (prototype, property) =&gt; {
+    // oxlint-disable-next-line typescript/unbound-method -- invoked through captured Reflect.apply
+    const getter = Object.getOwnPropertyDescriptor(prototype, property)?.get;
+    if (getter == null) {
+      throw new Error(`Missing ${property} getter`);
+    }
+    return getter;
+  };
+  const getMessageData = getPrototypeGetter(MessageEvent.prototype, &quot;data&quot;);
+  const getMessagePorts = getPrototypeGetter(MessageEvent.prototype, &quot;ports&quot;);
+  const getMessageSource = getPrototypeGetter(MessageEvent.prototype, &quot;source&quot;);
+  // oxlint-disable-next-line typescript/unbound-method -- captured before the untrusted fragment runs
+  const addHostMessageListener = MessagePort.prototype.addEventListener;
+  // oxlint-disable-next-line typescript/unbound-method -- captured before the untrusted fragment runs
+  const postHostMessage = MessagePort.prototype.postMessage;
+  // oxlint-disable-next-line typescript/unbound-method -- captured before the untrusted fragment runs
+  const startHostPort = MessagePort.prototype.start;
+  // oxlint-disable-next-line typescript/unbound-method -- captured before the untrusted fragment runs
+  const stopMessagePropagation = Event.prototype.stopImmediatePropagation;
+  /** @type {MessagePort | null} */
+  let hostPort = null;
+  const postToHost = (type, payload) =&gt; {
+    if (hostPort != null) {
+      apply(postHostMessage, hostPort, [{ type, ...payload }]);
+    }
+  };
+  const openExternal = ({ href }) =&gt; {
+    if (globalThis.navigator.userActivation?.isActive === true) {
+      postToHost(&quot;open-external&quot;, { href });
+    }
+  };
+  const sendFollowUpMessage = ({ context, prompt, title }) =&gt; {
+    if (globalThis.navigator.userActivation?.isActive === true) {
+      postToHost(&quot;follow-up&quot;, { context, prompt, title });
+    }
+    return Promise.resolve();
+  };
+  /**
+   * @param {Record&lt;string, unknown&gt; | ((previous: Record&lt;string, unknown&gt; | null) =&gt; Record&lt;string, unknown&gt;)} next
+   * @returns {Promise&lt;void&gt;}
+   */
+  const setWidgetState = async (next) =&gt; {
+    const nextState = typeof next === &quot;function&quot; ? next(state) : next;
+    if (
+      nextState == null ||
+      typeof nextState !== &quot;object&quot; ||
+      isArray(nextState)
+    ) {
+      throw new TypeError(&quot;Widget state must be a JSON object&quot;);
+    }
+    const inputState = stringify(
+      nextState,
+      (_key, /** @type {unknown} */ value) =&gt; {
+        if (
+          typeof value === &quot;undefined&quot; ||
+          typeof value === &quot;function&quot; ||
+          typeof value === &quot;symbol&quot; ||
+          (typeof value === &quot;number&quot; &amp;&amp; !Number.isFinite(value))
+        ) {
+          throw new TypeError(&quot;Widget state must be a JSON object&quot;);
+        }
+        return value;
+      },
+    );
+    const parsedState = parse(inputState);
+    if (
+      parsedState == null ||
+      typeof parsedState !== &quot;object&quot; ||
+      isArray(parsedState)
+    ) {
+      throw new TypeError(&quot;Widget state must be a JSON object&quot;);
+    }
+    const storedState = {
+      modelContent: null,
+      privateContent: null,
+      ...parsedState,
+    };
+    const serializedState = stringify(storedState);
+    if (encode(serializedState).length &gt; 16 * 1024) {
+      throw new TypeError(
+        &quot;Widget state must be a JSON object of at most 16 KiB&quot;,
+      );
+    }
+    if (
+      hasOwn(storedState, &quot;imageIds&quot;) &amp;&amp;
+      (!isArray(storedState.imageIds) ||
+        storedState.imageIds.some(
+          (/** @type {unknown} */ id) =&gt; typeof id !== &quot;string&quot;,
+        ))
+    ) {
+      throw new TypeError(&quot;Widget state imageIds must be an array of strings&quot;);
+    }
+    if (storedState.imageIds?.length &gt; 0) {
+      throw Object.assign(
+        new TypeError(&quot;Visualization state does not support image attachments&quot;),
+        { code: -32602, data: { code: &quot;images_unsupported&quot; } },
+      );
+    }
+    state = storedState;
+    globalThis.openai.widgetState = state;
+    globalThis.dispatchEvent(
+      new CustomEvent(&quot;openai:set_globals&quot;, {
+        detail: { globals: { widgetState: state } },
+      }),
+    );
+    if (statePersistence === &quot;none&quot;) {
+      throw persistenceError();
+    }
+    const id = ++nextStateRequestId;
+    return new Promise((resolve, reject) =&gt; {
+      const timeout = globalThis.setTimeout(() =&gt; {
+        pendingStateWrites.delete(id);
+        reject(persistenceError());
+      }, 30_000);
+      pendingStateWrites.set(id, { resolve, reject, timeout, serializedState });
+      postToHost(&quot;widget-state-write&quot;, { id, state: serializedState });
+    });
+  };
+  const syncTheme = () =&gt; {
+    const theme = mediaQuery.matches ? &quot;dark&quot; : &quot;light&quot;;
+    root.dataset.theme = theme;
+    globalThis.openai = {
+      ...globalThis.openai,
+      openExternal,
+      sendFollowUpMessage,
+      setWidgetState,
+      theme,
+      visualizationStyleVariables: {},
+      visualizationTheme: theme,
+      widgetState: state,
+      statePersistence,
+      stateModelContext: &quot;none&quot;,
+    };
+    globalThis.dispatchEvent(
+      new CustomEvent(&quot;openai:set_globals&quot;, {
+        detail: { globals: globalThis.openai },
+      }),
+    );
+  };
+  const sendHeight = () =&gt; {
+    postToHost(&quot;height&quot;, {
+      height: Math.ceil(
+        Math.max(
+          document.body.scrollHeight,
+          document.body.getBoundingClientRect().height,
+        ),
+      ),
+    });
+  };
+
+  globalThis.addEventListener(
+    &quot;message&quot;,
+    (event) =&gt; {
+      const data = apply(getMessageData, event, []);
+      const ports = apply(getMessagePorts, event, []);
+      const source = apply(getMessageSource, event, []);
+      if (
+        hostPort != null ||
+        source !== parentWindow ||
+        typeof data !== &quot;object&quot; ||
+        data?.type !== &quot;codex-visualization-initialize&quot; ||
+        !isArray(ports) ||
+        ports.length !== 1
+      ) {
+        return;
+      }
+      apply(stopMessagePropagation, event, []);
+      const nextHostPort = ports[0];
+      try {
+        apply(addHostMessageListener, nextHostPort, [
+          &quot;message&quot;,
+          (event) =&gt; {
+            const data = apply(getMessageData, event, []);
+            if (typeof data === &quot;object&quot; &amp;&amp; data?.type === &quot;measure&quot;) {
+              sendHeight();
+            } else if (
+              typeof data === &quot;object&quot; &amp;&amp;
+              data?.type === &quot;widget-state-result&quot;
+            ) {
+              /** @type {unknown} */
+              const id = data.id;
+              if (typeof id !== &quot;number&quot;) {
+                return;
+              }
+              const pending = pendingStateWrites.get(id);
+              if (pending != null) {
+                pendingStateWrites.delete(id);
+                globalThis.clearTimeout(pending.timeout);
+                if (data.ok === true) {
+                  pending.resolve();
+                } else {
+                  pending.reject(persistenceError());
+                }
+              }
+            }
+          },
+        ]);
+        apply(startHostPort, nextHostPort, []);
+      } catch {
+        return;
+      }
+      hostPort = nextHostPort;
+      for (const [id, { serializedState }] of pendingStateWrites) {
+        postToHost(&quot;widget-state-write&quot;, { id, state: serializedState });
+      }
+      sendHeight();
+    },
+    { capture: true },
+  );
+  document.currentScript?.remove();
+  mediaQuery.addEventListener(&quot;change&quot;, syncTheme);
+  globalThis.addEventListener(&quot;click&quot;, (event) =&gt; {
+    if (event.defaultPrevented) {
+      return;
+    }
+    let element = null;
+    if (event.target instanceof globalThis.Element) {
+      element = event.target;
+    } else if (event.target instanceof globalThis.Node) {
+      element = event.target.parentElement;
+    }
+    const link = element?.closest(&quot;a[href]&quot;);
+    const href = link?.getAttribute(&quot;href&quot;);
+    if (href == null) {
+      return;
+    }
+    if (href.startsWith(&quot;#&quot;)) {
+      let id;
+      try {
+        id = decodeURIComponent(href.slice(1));
+      } catch {
+        return;
+      }
+      const target = id.length === 0 ? root : document.getElementById(id);
+      if (
+        target == null ||
+        globalThis.navigator.userActivation?.isActive !== true
+      ) {
+        return;
+      }
+      event.preventDefault();
+      postToHost(&quot;scroll-to&quot;, {
+        top: target.getBoundingClientRect().top + globalThis.scrollY,
+      });
+      return;
+    }
+    event.preventDefault();
+    openExternal({ href });
+  });
+  new ResizeObserver(sendHeight).observe(document.body);
+  syncTheme();
+})();
+&lt;/script&gt;
+&lt;div id=&quot;evo-walk&quot;&gt;
+  &lt;header class=&quot;ew-header&quot;&gt;
+    &lt;div class=&quot;ew-eyebrow text-small&quot;&gt;EVOAGENT / INTERACTIVE FIELD GUIDE&lt;/div&gt;
+    &lt;h1&gt;一次 PR 审查，是怎样完成的？&lt;/h1&gt;
+    &lt;p class=&quot;ew-intro&quot;&gt;从请求进入，到结果发布。跟随 PR #5，观察状态、数据与 Checkpoint 如何逐步变化。&lt;/p&gt;
+    &lt;div class=&quot;viz-row&quot;&gt;&lt;span class=&quot;viz-badge&quot;&gt;离线教学演示&lt;/span&gt;&lt;span class=&quot;text-small&quot;&gt;PR #5&lt;/span&gt;&lt;code&gt;unsafe_handler.py:2&lt;/code&gt;&lt;code&gt;eval(user_input)&lt;/code&gt;&lt;/div&gt;
+    &lt;div class=&quot;ew-repository text-small&quot;&gt;gbh1234/MLLM-Jailbreak-Defense · 不会调用模型、访问 GitHub 或修改数据库&lt;/div&gt;
+  &lt;/header&gt;
+  &lt;details&gt;&lt;summary&gt;先弄清四种记录：业务状态、工作状态、Trace、Checkpoint&lt;/summary&gt;
+    &lt;table class=&quot;table&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;概念&lt;/th&gt;&lt;th&gt;它回答什么问题&lt;/th&gt;&lt;th&gt;保存在哪里&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+      &lt;tr&gt;&lt;td&gt;业务状态&lt;/td&gt;&lt;td&gt;这个任务当前处于 PENDING / PLANNING / EXECUTING / REVIEWING / SUCCESS / FAILED / CANCELLED 中哪一种？它不能代替阶段产出。&lt;/td&gt;&lt;td&gt;tasks.state；每次正常阶段切换同时追加 trace_events&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;Runtime 工作状态&lt;/td&gt;&lt;td&gt;本次执行已拿到哪些数据？先有 task_id、repository、pull_request、tenant_id、diff，再逐步增加 parsed、findings、report。&lt;/td&gt;&lt;td&gt;进程内字典；不是独立数据库表，进程退出会丢失&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;业务 Trace&lt;/td&gt;&lt;td&gt;任务曾发生过哪些状态变化？step 是业务轨迹编号，不是模型调用次数，也不是 Runtime 的节点尝试次数。&lt;/td&gt;&lt;td&gt;trace_events：追加记录，不会因保存 Checkpoint 覆盖旧历史&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;外层 Checkpoint&lt;/td&gt;&lt;td&gt;planning / executing / reviewing 节点的输出是否完成？恢复时 completed 节点被跳过，输出合并到工作状态。&lt;/td&gt;&lt;td&gt;checkpoints：三个节点各一条，唯一键是 task_id + node&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;内层会话 Checkpoint&lt;/td&gt;&lt;td&gt;executing 内的 Scanner、委派、Worker、Critic、Lead Final 哪些已完成？恢复时复用 session 中的已有成果。&lt;/td&gt;&lt;td&gt;同一 checkpoints 表中的 agentic-lead-session；反复覆盖更新，不是每个阶段新建一条&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;摘要 Checkpoint&lt;/td&gt;&lt;td&gt;生成报告时，怎样恢复协作摘要、模式、调用统计、Gate 结果？&lt;/td&gt;&lt;td&gt;同一 checkpoints 表中的 agentic-summary；它是报告恢复的辅助数据&lt;/td&gt;&lt;/tr&gt;
+    &lt;/tbody&gt;&lt;/table&gt;
+    &lt;p&gt;Harness 定义审查流程并处理业务状态；Runtime 执行节点、控制预算和重试；Reviewer 在 executing 中实际审查代码。它们是调用关系，不是三套互相独立的审查。&lt;/p&gt;
+  &lt;/details&gt;
+  &lt;div class=&quot;ew-navigation&quot;&gt;
+    &lt;div class=&quot;viz-controls&quot;&gt;
+      &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;ew-prev&quot;&gt;← 上一步&lt;/button&gt;
+      &lt;button class=&quot;btn btn-primary&quot; type=&quot;button&quot; id=&quot;ew-next&quot;&gt;下一步 →&lt;/button&gt;
+      &lt;span class=&quot;tabular-nums text-small&quot; id=&quot;ew-count&quot;&gt;&lt;/span&gt;
+      &lt;button class=&quot;btn btn-ghost&quot; type=&quot;button&quot; id=&quot;ew-crash&quot;&gt;模拟 Worker 完成后退出&lt;/button&gt;
+      &lt;button class=&quot;btn&quot; type=&quot;button&quot; id=&quot;ew-normal&quot; hidden&gt;返回正常流程&lt;/button&gt;
+    &lt;/div&gt;
+    &lt;label class=&quot;form-label&quot; for=&quot;ew-jump&quot; style=&quot;display:block;margin-top:16px&quot;&gt;当前步骤 · 也可以直接跳转&lt;/label&gt;
+    &lt;select class=&quot;form-select&quot; id=&quot;ew-jump&quot;&gt;&lt;/select&gt;
+  &lt;/div&gt;
+  &lt;div id=&quot;ew-road&quot; class=&quot;viz-row&quot; style=&quot;margin-top:16px&quot; aria-label=&quot;执行阶段&quot;&gt;&lt;/div&gt;
+  &lt;div class=&quot;progress&quot; role=&quot;progressbar&quot; aria-label=&quot;流程阅读进度&quot; aria-valuemin=&quot;0&quot; aria-valuemax=&quot;100&quot; aria-valuenow=&quot;0&quot; id=&quot;ew-progress&quot;&gt;&lt;div class=&quot;progress-bar&quot; id=&quot;ew-progress-bar&quot; style=&quot;width:0%&quot;&gt;&lt;/div&gt;&lt;/div&gt;
+  &lt;div class=&quot;card&quot; aria-live=&quot;polite&quot; style=&quot;margin-top:24px&quot;&gt;
+    &lt;div class=&quot;text-small&quot;&gt;正在发生&lt;/div&gt;
+    &lt;h3 id=&quot;ew-title&quot;&gt;&lt;/h3&gt;
+    &lt;div id=&quot;ew-action&quot;&gt;&lt;/div&gt;
+  &lt;/div&gt;
+  &lt;div class=&quot;viz-grid&quot; style=&quot;margin-top:16px&quot;&gt;
+    &lt;div class=&quot;card viz-stat&quot;&gt;&lt;div&gt;数据库业务状态&lt;/div&gt;&lt;div class=&quot;viz-stat-value&quot; id=&quot;ew-status&quot;&gt;&lt;/div&gt;&lt;div class=&quot;text-small&quot;&gt;tasks.state · 持久化进度&lt;/div&gt;&lt;/div&gt;
+    &lt;div class=&quot;card viz-stat&quot;&gt;&lt;div&gt;线程状态&lt;/div&gt;&lt;div class=&quot;viz-stat-value&quot; id=&quot;ew-context&quot;&gt;&lt;/div&gt;&lt;div class=&quot;text-small&quot;&gt;_ctx.state · 当前线程&lt;/div&gt;&lt;/div&gt;
+    &lt;div class=&quot;card viz-stat&quot;&gt;&lt;div&gt;本次节点尝试&lt;/div&gt;&lt;div class=&quot;viz-stat-value tabular-nums&quot; id=&quot;ew-step&quot;&gt;&lt;/div&gt;&lt;div class=&quot;text-small&quot;&gt;Runtime step · 非模型调用次数&lt;/div&gt;&lt;/div&gt;
+  &lt;/div&gt;
+  &lt;hr&gt;
+  &lt;div class=&quot;ew-grid&quot;&gt;
+    &lt;section&gt;&lt;div class=&quot;ew-section-heading&quot;&gt;&lt;h2&gt;工作状态&lt;/h2&gt;&lt;span class=&quot;viz-badge&quot;&gt;内存&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;text-small ew-caption&quot;&gt;节点之间传递的数据；进程退出后需要重建。&lt;/div&gt;&lt;table class=&quot;table table-sm&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;字段&lt;/th&gt;&lt;th&gt;当前值&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody id=&quot;ew-work&quot;&gt;&lt;/tbody&gt;&lt;/table&gt;&lt;/section&gt;
+    &lt;section&gt;&lt;div class=&quot;ew-section-heading&quot;&gt;&lt;h2&gt;业务轨迹&lt;/h2&gt;&lt;span class=&quot;viz-badge&quot;&gt;数据库&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;text-small ew-caption&quot;&gt;trace_events · 记录状态变化，不负责恢复计算。&lt;/div&gt;&lt;table class=&quot;table table-sm&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;step&lt;/th&gt;&lt;th&gt;state&lt;/th&gt;&lt;th&gt;message&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody id=&quot;ew-trace&quot;&gt;&lt;/tbody&gt;&lt;/table&gt;&lt;/section&gt;
+  &lt;/div&gt;
+  &lt;div class=&quot;ew-section-heading&quot;&gt;&lt;h2&gt;Checkpoint 快照&lt;/h2&gt;&lt;span class=&quot;viz-badge&quot;&gt;数据库&lt;/span&gt;&lt;/div&gt;
+  &lt;div class=&quot;text-small ew-caption&quot;&gt;checkpoints · 同一 task_id + node 更新同一条记录；点击展开完整 JSON，蓝色行表示字段变化。&lt;/div&gt;
+  &lt;table class=&quot;table table-sm&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;node&lt;/th&gt;&lt;th&gt;status / attempt&lt;/th&gt;&lt;th&gt;state_json&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody id=&quot;ew-cp&quot;&gt;&lt;/tbody&gt;&lt;/table&gt;
+  &lt;div class=&quot;ew-section-heading&quot;&gt;&lt;h2&gt;任务与其他存储&lt;/h2&gt;&lt;span class=&quot;text-small&quot;&gt;tasks / payload / queue / GitHub&lt;/span&gt;&lt;/div&gt;
+  &lt;table class=&quot;table table-sm&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;位置&lt;/th&gt;&lt;th&gt;当前保存值&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody id=&quot;ew-other&quot;&gt;&lt;/tbody&gt;&lt;/table&gt;
+  &lt;div class=&quot;ew-section-heading&quot;&gt;&lt;h2&gt;Reviewer 会话&lt;/h2&gt;&lt;span class=&quot;viz-badge&quot;&gt;内存&lt;/span&gt;&lt;/div&gt;
+  &lt;div class=&quot;text-small&quot;&gt;Scanner 候选、Worker 结果和 Lead 决策先在这里变化，再复制进内层 Checkpoint。进程退出时内存丢失；恢复后从数据库还原。&lt;/div&gt;
+  &lt;table class=&quot;table table-sm&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;字段&lt;/th&gt;&lt;th&gt;当前值&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody id=&quot;ew-session&quot;&gt;&lt;/tbody&gt;&lt;/table&gt;
+  &lt;div class=&quot;ew-section-heading&quot;&gt;&lt;h2&gt;这一步做什么&lt;/h2&gt;&lt;span class=&quot;text-small&quot;&gt;输入 → 检查 → 执行 → 保存&lt;/span&gt;&lt;/div&gt;
+  &lt;div id=&quot;ew-guide&quot; style=&quot;margin-top:16px&quot;&gt;&lt;/div&gt;
+  &lt;div class=&quot;ew-section-heading&quot;&gt;&lt;h2&gt;本步具体变更&lt;/h2&gt;&lt;span class=&quot;viz-badge&quot;&gt;字段级比较&lt;/span&gt;&lt;/div&gt;
+  &lt;div class=&quot;text-small&quot;&gt;有变化的数据块在未展开时也标蓝；展开后只标出新增或修改的字段行。切换步骤会保留展开状态。&lt;/div&gt;
+  &lt;div id=&quot;ew-delta&quot; aria-live=&quot;polite&quot;&gt;&lt;/div&gt;
+  &lt;div class=&quot;ew-section-heading&quot;&gt;&lt;h2&gt;延伸阅读&lt;/h2&gt;&lt;span class=&quot;text-small&quot;&gt;记录边界 · 恢复规则 · 源码入口&lt;/span&gt;&lt;/div&gt;
+  &lt;details style=&quot;margin-top:12px&quot;&gt;&lt;summary&gt;还需要知道的记录与边界&lt;/summary&gt;
+    &lt;table class=&quot;table&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;记录&lt;/th&gt;&lt;th&gt;在哪里 / 用途&lt;/th&gt;&lt;th&gt;与本页快照的关系&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+      &lt;tr&gt;&lt;td&gt;Execution Ledger&lt;/td&gt;&lt;td&gt;Reviewer 内存账本，跟随 agentic-lead-session 保存；包含 model_call_log、tool_call_log、agent_traces 和用量统计。&lt;/td&gt;&lt;td&gt;Checkpoint 中 execution 显示账本位置；这里没有捏造真实调用参数、耗时和Token。PR #5 的最终已知统计单独保留。&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;工具 Observation&lt;/td&gt;&lt;td&gt;一次 BoundedRole 激活中的工具结果；下一步传给模型，可含 evidence_id。启用记忆时还可能写入工作记忆。&lt;/td&gt;&lt;td&gt;不是每次工具调用就独立建外层 Checkpoint；角色中途退出可能重做尚未保存的角色工作。&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;节点尝试 / RuntimeEvent&lt;/td&gt;&lt;td&gt;Runtime 的 started、completed、failed 等执行事件，通过可选 event_sink 输出。&lt;/td&gt;&lt;td&gt;当前 Harness 未给 Runtime 配 event_sink，因此不要误认为这些事件全部写入 trace_events。&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;Observability span&lt;/td&gt;&lt;td&gt;review、review.async、runtime.planning 等观测跨度，记录节点执行及耗时；是否导出取决于配置。&lt;/td&gt;&lt;td&gt;不是 Checkpoint，也不是新的业务状态。不会用它决定从哪个阶段恢复。&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;failure_cases / alerts&lt;/td&gt;&lt;td&gt;execution_error 或用户反馈保存到 failure_cases；死信或相关告警保存到 alerts。&lt;/td&gt;&lt;td&gt;本页成功但降级的示例，没有凭空添加一次整个任务失败记录；Worker 失败先在 session 中保存。&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;agent_messages&lt;/td&gt;&lt;td&gt;有对应表和存储接口，但当前主流程并未普遍接入逐条原始消息持久化。&lt;/td&gt;&lt;td&gt;不能看到表名就认定保存了完整 Lead / Worker 对话。&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;队列投递状态&lt;/td&gt;&lt;td&gt;Memory / Redis，含消息、投递次数、消费与ACK；Redis pending 可以被租约回收。&lt;/td&gt;&lt;td&gt;与 tasks.state 独立。任务SUCCESS后，评论仍可能失败、队列仍可能重试。&lt;/td&gt;&lt;/tr&gt;
+    &lt;/tbody&gt;&lt;/table&gt;
+  &lt;/details&gt;
+  &lt;details style=&quot;margin-top:12px&quot;&gt;&lt;summary&gt;示例数据与真实记录的边界&lt;/summary&gt;&lt;div class=&quot;text-small&quot; style=&quot;margin-top:8px&quot;&gt;真实已知：PR #5 最终 SUCCESS，整体风险 high，正式 Finding 为 Critical / SEC-EVAL，有 local-rule 与 diff-ast 引用，且一个 specialist Worker 失败。任务 ID、Diff 外围文本、具体委派、失败角色、模型决策、置信度、节点顺序时间和 attempt 均为教学重建；不是读取数据库得到的历史回放。本页采用当前代码的 lead-workers-v3、agentic-summary 和一轮返工上限。业务 Trace step 与 Runtime step 是两个计数；Checkpoint 的 attempt 也不是模型调用次数。&lt;/div&gt;&lt;/details&gt;
+  &lt;details style=&quot;margin-top:12px&quot;&gt;&lt;summary&gt;错误与恢复：完整决策规则&lt;/summary&gt;
+    &lt;table class=&quot;table&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;如果发生&lt;/th&gt;&lt;th&gt;怎样处理&lt;/th&gt;&lt;th&gt;留下什么&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+      &lt;tr&gt;&lt;td&gt;入口签名无效、事件过期&lt;/td&gt;&lt;td&gt;入口拒绝请求，不进入 Runtime。Webhook 过期检查与执行时间预算不是同一个机制。&lt;/td&gt;&lt;td&gt;不会产生本次审查的节点 Checkpoint&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;普通节点异常&lt;/td&gt;&lt;td&gt;Runtime 在本次预算内重新调用当前 handler；默认初次加2次重试。没有指数退避等待；也不必重新读取外层 Checkpoint。&lt;/td&gt;&lt;td&gt;当前节点 failed Checkpoint，state 为 {}，保存 attempt 和 error；旧内层会话成果可保留&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;ValueError / 取消 / RuntimeBudgetExceeded&lt;/td&gt;&lt;td&gt;本次 Runtime 不进行节点重试，异常交给 Harness。外层队列是否再投递是另一层策略。&lt;/td&gt;&lt;td&gt;Harness 写 FAILED 或 CANCELLED Trace；普通失败尝试记录 failure_cases，当前不可重试分支不写新的 failed 节点 Checkpoint&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;一个 Worker 失败&lt;/td&gt;&lt;td&gt;记录 Worker 失败，不直接让 executing 失败；Lead 可以根据其他成果继续，或在允许范围内返工。&lt;/td&gt;&lt;td&gt;agentic-lead-session.worker_results 中 status=failed、error；最终报告可以 SUCCESS 但标为 degraded&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;整个进程突然退出&lt;/td&gt;&lt;td&gt;当前运行无法自动继续，通常来不及做异常收尾。进程重启后由 resume 或持久队列重新交付任务。&lt;/td&gt;&lt;td&gt;内存丢失，已提交到数据库的成果保留；tasks.state 可能停在 EXECUTING&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;只有 planning completed&lt;/td&gt;&lt;td&gt;恢复 parsed，跳过 planning；重新进入 executing，再检查内层 session。&lt;/td&gt;&lt;td&gt;没有第二条 PLANNING Trace；新 executing 尝试可能追加新的 EXECUTING Trace&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;内层 Worker 已保存，但 executing 未完成&lt;/td&gt;&lt;td&gt;复用 Scanner、委派、已有 Worker 结果，从后续未完成阶段继续；保存为 failed 的 Worker 也不会被初始待执行列表自动重新跑。&lt;/td&gt;&lt;td&gt;旧调用账本恢复，最终统计包含中断前的调用&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;report Checkpoint 完成，SUCCESS 尚未落库&lt;/td&gt;&lt;td&gt;三个外层节点都跳过；Harness 恢复报告，再完成 SUCCESS 和报告落库。&lt;/td&gt;&lt;td&gt;无需重新调用模型；tasks.report_json 最终写入&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;SUCCESS 后评论失败&lt;/td&gt;&lt;td&gt;队列可重试；Harness 返回旧报告，重新尝试评论 Upsert。&lt;/td&gt;&lt;td&gt;任务仍可为 SUCCESS；评论结果与审查成功是不同层次&lt;/td&gt;&lt;/tr&gt;
+      &lt;tr&gt;&lt;td&gt;新旧输入不一致&lt;/td&gt;&lt;td&gt;不能给同一 task ID 换一份 Diff 来恢复；当前 Harness 不比较 Diff 哈希。&lt;/td&gt;&lt;td&gt;正常 Service 保存原 Diff；SHA-256 元数据不等于恢复时做一致性验证&lt;/td&gt;&lt;/tr&gt;
+    &lt;/tbody&gt;&lt;/table&gt;
+    &lt;p&gt;重新进入 execute() 会获得新的步数与时间预算。外层 Checkpoint 的 attempt 只会从已保存的编号继续累加：如果进程在第一次 executing 中直接退出，且外层还没有保存 attempt，下次编号可能仍从1开始。&lt;/p&gt;
+    &lt;p&gt;本地 memory-acked 队列及其死信记录不跨进程持久化；Redis Streams 才能保留队列消息。数据库 Checkpoint 保存了成果，不代表进程重启后一定自动调度所有未完成任务。&lt;/p&gt;
+  &lt;/details&gt;
+  &lt;details style=&quot;margin-top:12px&quot;&gt;&lt;summary&gt;源码索引与文档差异&lt;/summary&gt;&lt;table class=&quot;table&quot;&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;源码文件&lt;/th&gt;&lt;th&gt;重点阅读位置&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+    &lt;tr&gt;&lt;td&gt;evoagent/api.py&lt;/td&gt;&lt;td&gt;HTTP 入口、认证与 GitHub Webhook 校验&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;evoagent/service.py&lt;/td&gt;&lt;td&gt;create_review、handle_github_pull_request、_process_queued、_run_review、resume_task&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;evoagent/harness.py&lt;/td&gt;&lt;td&gt;ReviewHarness.run、_planning、_executing、_reviewing、_transition&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;evoagent/runtime.py&lt;/td&gt;&lt;td&gt;AgentRuntime.execute、ToolRegistry.invoke&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;evoagent/agentic_core.py&lt;/td&gt;&lt;td&gt;BoundedRole.run、_agentic、_run_pending_assignments、_load_lead_session、_save_lead_session&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;evoagent/llm.py&lt;/td&gt;&lt;td&gt;complete_json、_parse_json_object&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;evoagent/gates.py&lt;/td&gt;&lt;td&gt;FindingGate.apply&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;evoagent/store.py&lt;/td&gt;&lt;td&gt;create、transition、succeed、fail、save_checkpoint、load_checkpoints&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;evoagent/task_queue.py / github.py&lt;/td&gt;&lt;td&gt;投递、重试、ACK、死信；评论 Upsert&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;&lt;/table&gt;&lt;p&gt;基于本次已核对的当前代码：Service 直接装配 AgenticReviewer；摘要名为 agentic-summary；内层协议 lead-workers-v3；高风险最多1轮返工；Lead 和 Critic 当前不开放工具。旧文档中的 ModeRouterReviewer、mode-router-summary、v1 和两轮返工不能直接套用。&lt;/p&gt;&lt;/details&gt;
+&lt;/div&gt;
+&lt;style&gt;
+#evo-walk {color:var(--foreground);max-width:1120px;margin:0 auto;padding:24px 20px 48px;}
+#evo-walk .ew-header {margin-bottom:24px;}
+#evo-walk .ew-eyebrow {color:var(--muted-foreground);letter-spacing:.12em;}
+#evo-walk .ew-intro {max-width:760px;}
+#evo-walk .ew-repository {margin-top:12px;color:var(--muted-foreground);overflow-wrap:anywhere;}
+#evo-walk .ew-navigation {margin-top:24px;}
+#evo-walk .ew-section-heading {display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:30px 0 12px;}
+#evo-walk .ew-section-heading h2 {margin:0;}
+#evo-walk .ew-caption {color:var(--muted-foreground);margin-bottom:14px;}
+#evo-walk .ew-grid {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px;}
+#evo-walk section {min-width:0;}
+#evo-walk th,#evo-walk td {overflow-wrap:anywhere;vertical-align:top;}
+#evo-walk th {font-weight:500;color:var(--muted-foreground);}
+#evo-walk #ew-guide td:first-child {width:135px;font-weight:500;}
+#evo-walk #ew-other td:first-child,#evo-walk #ew-session td:first-child {width:24%;}
+#evo-walk #ew-cp td:first-child {width:23%;}
+#evo-walk #ew-cp td:nth-child(2) {width:20%;}
+#evo-walk #ew-work td:first-child {width:28%;}
+#evo-walk #ew-progress {margin-top:12px;}
+#evo-walk &gt; details {margin:12px 0;}
+#evo-walk summary {padding:8px 0;overflow-wrap:anywhere;}
+#evo-walk details[open] &gt; summary {font-weight:500;}
+#evo-walk details.ew-has-changes:not([open]) &gt; summary {color:var(--blue);background:color-mix(in srgb,var(--blue) 12%,transparent);}
+#evo-walk pre {white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0;color:var(--foreground);}
+#evo-walk .ew-json {tab-size:2;font-family:Consolas,&quot;Cascadia Code&quot;,monospace;}
+#evo-walk .ew-json-line {white-space:pre-wrap;overflow-wrap:anywhere;}
+#evo-walk .ew-change {background:color-mix(in srgb,var(--blue) 12%,transparent);color:var(--foreground);}
+#evo-walk .ew-tree {margin:4px 0 8px 8px;padding-left:12px;border-left:1px solid var(--border);overflow-wrap:anywhere;}
+#evo-walk .ew-leaf {padding:6px 8px;margin:3px 0;overflow-wrap:anywhere;white-space:pre-wrap;}
+#evo-walk .ew-key {font-weight:500;}
+#evo-walk .ew-before {color:var(--muted-foreground);}
+#evo-walk .ew-tag {color:var(--blue);font-weight:500;}
+#evo-walk .ew-stage {padding:7px 0;color:var(--muted-foreground);}
+#evo-walk .ew-stage.active {color:var(--foreground);font-weight:500;}
+#evo-walk strong {font-weight:500;}
+@media(max-width:700px){#evo-walk{padding:16px 4px 32px;}#evo-walk .ew-grid{grid-template-columns:1fr;gap:8px;}#evo-walk .ew-section-heading{margin-top:24px;}#evo-walk #ew-guide td:first-child{width:90px;}#evo-walk #ew-cp td:first-child{width:28%;}}
+&lt;/style&gt;
+&lt;script&gt;
+(() =&gt; {
+ const root=document.getElementById(&#x27;evo-walk&#x27;);
+ const el=id=&gt;root.querySelector(&#x27;#ew-&#x27;+id);
+ const clone=v=&gt;JSON.parse(JSON.stringify(v));
+ const task=&#x27;demo-pr5&#x27;;
+ const repository=&#x27;gbh1234/MLLM-Jailbreak-Defense&#x27;;
+ const diff=&#x27;diff --git a/unsafe_handler.py b/unsafe_handler.py\n--- /dev/null\n+++ b/unsafe_handler.py\n@@ -0,0 +1,2 @@\n+def unsafe_handler(user_input):\n+    return eval(user_input)&#x27;;
+ const parsed={files:[&#x27;unsafe_handler.py&#x27;],added_lines:[{path:&#x27;unsafe_handler.py&#x27;,line:1,content:&#x27;def unsafe_handler(user_input):&#x27;},{path:&#x27;unsafe_handler.py&#x27;,line:2,content:&#x27;    return eval(user_input)&#x27;}]};
+ const finding={rule_id:&#x27;SEC-EVAL&#x27;,cwe:&#x27;CWE-95&#x27;,severity:&#x27;critical&#x27;,title:&#x27;动态代码执行可能导致注入&#x27;,path:&#x27;unsafe_handler.py&#x27;,line:2,evidence:&#x27;return eval(user_input)&#x27;,explanation:&#x27;新增代码调用动态执行函数；参数可被外部影响时可能执行任意代码。&#x27;,confidence:0.9,evidence_refs:[{evidence_id:&#x27;local-rule:f3deabfbb2053ee6&#x27;,tool:&#x27;local-rule-scanner&#x27;},{evidence_id:&#x27;diff-ast:f0460e9a122bfb51&#x27;,tool:&#x27;diff-ast-analyze&#x27;}],call_chain:[],fix:&#x27;移除动态执行，使用显式解析器或严格白名单。&#x27;,test:&#x27;验证恶意表达式不会被当作代码执行。&#x27;};
+ const assignment=[{assignment_id:&#x27;security-eval&#x27;,worker:&#x27;security&#x27;,objective:&#x27;检查新增动态执行是否存在注入&#x27;,files:[&#x27;unsafe_handler.py&#x27;],required_evidence:[&#x27;changed-line evidence&#x27;]},{assignment_id:&#x27;reliability-handler&#x27;,worker:&#x27;correctness-reliability&#x27;,objective:&#x27;检查新增函数的异常与执行行为&#x27;,files:[&#x27;unsafe_handler.py&#x27;]}];
+ const summary={collaboration:{protocol:&#x27;lead-workers&#x27;,degraded:true,failed_workers:1,candidate_findings_before_critic:1},run_mode:{requested:&#x27;agentic&#x27;,effective:&#x27;agentic&#x27;},execution:{model_calls:&#x27;真实报告为14；本演示不复原每次调用&#x27;,tool_calls:&#x27;真实报告为7&#x27;,total_tokens:55255},gates:{accepted:1,rejected:0},rejected_findings:[]};
+ const report={repository,pull_request:5,risk:&#x27;high&#x27;,findings:[finding],summary:&#x27;Reviewed 1 file(s); found 1 actionable issue(s). Overall risk: high.&#x27;,collaboration:summary.collaboration,execution:summary.execution};
+ let s={db:&#x27;尚未创建&#x27;,ctx:&#x27;未初始化&#x27;,step:0,work:{},trace:[],cp:{},other:{},session:null};
+ const snapshots=[];
+ function capture(title,action,stage){snapshots.push({...clone(s),title,action,stage});}
+ function transition(state,message){s.db=state;s.ctx=state;s.trace.push({step:s.trace.length+1,state,message});s.other[&#x27;tasks&#x27;].state=state;}
+ function save(node,data,status=&#x27;completed&#x27;,attempt=1){s.cp[node]={status,attempt,state_json:clone(data)};}
+ function sessionSave(completed=false){save(&#x27;agentic-lead-session&#x27;,{protocol:&#x27;lead-workers-v3&#x27;,session:s.session,execution:{model_call_log:&#x27;逐次调用记录随会话保存；本页未重建原始调用&#x27;,tool_call_log:&#x27;工具名、参数、成功状态、证据预览&#x27;,agent_traces:&#x27;角色决策与执行事件&#x27;}},completed?&#x27;completed&#x27;:&#x27;in_progress&#x27;);}
+ capture(&#x27;检查 Webhook&#x27;,&#x27;API 校验 pull_request 事件、签名和时间窗口；Service 校验 action、仓库授权和模型配置。还没有 Runtime 工作状态或业务 Trace。&#x27;,&#x27;入口&#x27;);
+ s.other[&#x27;webhook_deliveries&#x27;]={delivery_id:&#x27;demo-delivery-pr5&#x27;,payload_sha256:&#x27;教学指纹：同一正文保持一致&#x27;,task_id:task};s.db=&#x27;PENDING&#x27;;s.other[&#x27;tasks&#x27;]={id:task,state:&#x27;PENDING&#x27;,repository,pull_request:5,tenant_id:&#x27;default&#x27;,report_json:null,error:null,cancel_requested:0,input:{source:&#x27;github-webhook&#x27;,diff_pending:true}};s.other[&#x27;queue&#x27;]={message_id:task,status:&#x27;待处理&#x27;};
+ capture(&#x27;创建任务并入队&#x27;,&#x27;创建 tasks 的 PENDING 记录；webhook_deliveries 关联任务；队列保存任务引用。创建任务本身不写 PENDING Trace。&#x27;,&#x27;入口&#x27;);
+ s.other[&#x27;task_payloads&#x27;]={task_id:task,diff};s.other[&#x27;tasks&#x27;].input.diff_pending=false;s.other[&#x27;tasks&#x27;].input.diff_bytes=new TextEncoder().encode(diff).length;s.other[&#x27;tasks&#x27;].input.diff_sha256=&#x27;教学占位：原始 Diff SHA-256（本页不冒充真实指纹）&#x27;;s.other[&#x27;queue&#x27;].status=&#x27;正在处理&#x27;;
+ capture(&#x27;队列 Worker 下载原始 Diff&#x27;,&#x27;检查任务和仓库访问权限，获取 Diff 并检查大小。原始 Diff 保存到 task_payloads；tasks.input 记录字节数与 SHA-256。&#x27;,&#x27;入口&#x27;);
+ s.ctx=&#x27;PENDING&#x27;;s.work={task_id:task,repository,pull_request:5,tenant_id:&#x27;default&#x27;,diff};
+ capture(&#x27;Harness.run() 准备工作状态&#x27;,&#x27;检查 SUCCESS + 报告快捷返回；读取 Checkpoint。本例首次执行，没有已完成节点。构造内存工作状态，交给 Runtime。&#x27;,&#x27;准备&#x27;);
+ s.step=1;transition(&#x27;PLANNING&#x27;,&#x27;Input accepted; preparing review plan&#x27;);
+ capture(&#x27;planning handler 解析成功&#x27;,&#x27;本次第1个节点尝试。解析 Diff 后写 PLANNING 业务状态和 Trace；handler 即将返回 parsed，Runtime 尚未合并或保存它。&#x27;,&#x27;planning&#x27;);
+ s.work.parsed=parsed;save(&#x27;planning&#x27;,{parsed});
+ capture(&#x27;planning 输出已保存&#x27;,&#x27;Runtime 将 parsed 合并到工作状态，并写 planning completed Checkpoint。业务状态仍是 PLANNING；completed 是节点完成标记。&#x27;,&#x27;planning&#x27;);
+ s.step=2;transition(&#x27;EXECUTING&#x27;,&#x27;Reviewing 1 changed files&#x27;);
+ s.session={phase:&#x27;created&#x27;,scanner_complete:false,scanner_findings:[],delegations:[],worker_results:{},lead_assessments:[],revision_results:{},critic_decisions:[],lead_final:{},accepted_findings:[]};
+ capture(&#x27;executing 开始&#x27;,&#x27;第2个节点尝试开始，写 EXECUTING 状态与 Trace。Reviewer 准备角色、工具、账本和记忆。工作状态还没有 findings。&#x27;,&#x27;executing&#x27;);
+ s.session.phase=&#x27;scanned&#x27;;s.session.scanner_complete=true;s.session.scanner_findings=[finding];sessionSave();
+ capture(&#x27;Scanner 得到候选 SEC-EVAL&#x27;,&#x27;本地规则命中 eval，补充 Diff AST 引用。候选保存到内层 session 和 Checkpoint，不会直接放入外层工作状态的 findings。&#x27;,&#x27;executing&#x27;);
+ s.session.phase=&#x27;delegated&#x27;;s.session.delegations=assignment;s.session.risk_level=&#x27;high&#x27;;sessionSave();
+ capture(&#x27;Lead 完成委派&#x27;,&#x27;教学委派：Security 检查注入，Reliability 检查行为。程序规范化委派并保存。内层变更不会新增 EXECUTING 业务 Trace。&#x27;,&#x27;executing&#x27;);
+ s.session.phase=&#x27;workers-completed&#x27;;s.session.worker_results={&#x27;security-eval&#x27;:{status:&#x27;completed&#x27;,worker:&#x27;security&#x27;,findings:[finding]},&#x27;reliability-handler&#x27;:{status:&#x27;failed&#x27;,worker:&#x27;correctness-reliability&#x27;,findings:[],error:&#x27;教学示例：角色返回协议失败&#x27;}};sessionSave();
+ capture(&#x27;Worker 结果已保存&#x27;,&#x27;演示一个 Worker 成功、一个失败。真实报告确有1个失败 Worker，但具体角色与错误未在本页核验。失败写进 session，整场审查仍可继续。&#x27;,&#x27;executing&#x27;);
+ s.session.lead_assessments=[{revision_requests:[],critic_objective:&#x27;核对注入前提与新增行证据&#x27;}];sessionSave();
+ capture(&#x27;Lead 评估，不要求返工&#x27;,&#x27;教学选择：已有证据足以继续，不提出返工。当前代码高风险最多返工1轮，普通风险不走这一轮评估。&#x27;,&#x27;executing&#x27;);
+ s.session.phase=&#x27;critic-completed&#x27;;s.session.critic_complete=true;s.session.critic_decisions=[{finding_index:0,accepted:true,objections:[],confidence_adjustment:0}];s.session.critic_candidates=[finding];sessionSave();
+ capture(&#x27;Critic 完成去来源审查&#x27;,&#x27;教学决定：接受第0项。当前 Critic 一次返回、不调用工具。决定保存到内层 Checkpoint；Critic 不是最终发布门禁。&#x27;,&#x27;executing&#x27;);
+ s.session.phase=&#x27;completed&#x27;;s.session.lead_final={accepted_finding_indices:[0],confidence_adjustments:[],severity_adjustments:[]};s.session.accepted_findings=[finding];sessionSave(true);
+ capture(&#x27;Lead Final 保留第0项&#x27;,&#x27;保存 Lead 最终选择，内层 session completed。此时外层 executing 尚未完成，任务也仍是 EXECUTING。&#x27;,&#x27;executing&#x27;);
+ save(&#x27;agentic-summary&#x27;,summary);s.other[&#x27;agent_memories（启用时）&#x27;]={kind:[&#x27;finding_approved&#x27;,&#x27;task_summary&#x27;],content:&#x27;Gate 通过的 SEC-EVAL 与任务摘要（不是人工确认）&#x27;};
+ capture(&#x27;Finding Gate 通过&#x27;,&#x27;检查新增行、字段、强证据、confidence ≥ 0.55、fix/test。保存 agentic-summary 和可选记忆。正式 Finding 准备作为 executing 输出返回。&#x27;,&#x27;executing&#x27;);
+ s.work.findings=[finding];save(&#x27;executing&#x27;,{findings:[finding]});
+ capture(&#x27;executing 输出已保存&#x27;,&#x27;Runtime 合并正式 findings，并保存外层 executing completed。现在即使 Reviewer 整体不再运行，也能恢复正式结果。&#x27;,&#x27;executing&#x27;);
+ s.step=3;transition(&#x27;REVIEWING&#x27;,&#x27;Validating and ranking 1 findings&#x27;);
+ capture(&#x27;reviewing 开始组装报告&#x27;,&#x27;第3个节点尝试；读取 parsed、findings 和 agentic-summary。写 REVIEWING Trace；不再次让模型审查代码。&#x27;,&#x27;reviewing&#x27;);
+ s.work.report=report;save(&#x27;reviewing&#x27;,{report});
+ capture(&#x27;reviewing 输出已保存&#x27;,&#x27;将报告加入工作状态并写 reviewing completed。任务还未 SUCCESS，tasks.report_json 此时尚未写入。&#x27;,&#x27;reviewing&#x27;);
+ s.db=&#x27;SUCCESS&#x27;;s.trace.push({step:s.trace.length+1,state:&#x27;SUCCESS&#x27;,message:&#x27;Review completed&#x27;});s.other[&#x27;tasks&#x27;].state=&#x27;SUCCESS&#x27;;s.other[&#x27;tasks&#x27;].report_json=report;
+ capture(&#x27;Harness 成功落库&#x27;,&#x27;Store 保存最终报告、SUCCESS 状态与 Trace。_ctx.state 仍停在 REVIEWING：成功落库不经过 _transition；它不是数据库状态的实时镜像。&#x27;,&#x27;完成&#x27;);
+ s.other[&#x27;GitHub comment&#x27;]={marker:&#x27;&lt;!-- evoagent-review:demo-pr5 --&gt;&#x27;,risk:&#x27;high&#x27;,finding:&#x27;Critical / SEC-EVAL&#x27;,degraded:&#x27;1 specialist worker failed&#x27;};s.other[&#x27;queue&#x27;].status=&#x27;处理成功（Redis 后端 ACK）&#x27;;
+ capture(&#x27;评论 Upsert 与队列完成&#x27;,&#x27;GitHub 中创建或更新带本任务 Marker 的评论。若评论失败，队列可重试；Harness 会复用 SUCCESS 报告。&#x27;,&#x27;完成&#x27;);
+ const base=clone(snapshots[9]);
+ const crash={...base,title:&#x27;模拟：Worker 完成后进程退出&#x27;,action:&#x27;内存工作状态、线程状态和本次计数丢失。数据库保留 EXECUTING、原始 Diff、planning Checkpoint 与内层 Worker 结果。突然退出来不及写 FAILED。&#x27;,stage:&#x27;恢复&#x27;,work:{},session:null,ctx:&#x27;丢失&#x27;,step:&#x27;丢失&#x27;};
+ const prep={...base,title:&#x27;恢复：重新进入 Harness.run()&#x27;,action:&#x27;使用同一 task ID 和原始 Diff。业务表仍为 EXECUTING，但 Harness 根据外层已完成 planning 推断线程状态为 PLANNING。本次 Runtime 预算重新开始。&#x27;,stage:&#x27;恢复&#x27;,session:null,ctx:&#x27;PLANNING&#x27;,step:0,work:{task_id:task,repository,pull_request:5,tenant_id:&#x27;default&#x27;,diff}};
+ const restore={...clone(prep),title:&#x27;恢复：跳过 planning，进入 executing&#x27;,action:&#x27;恢复 planning.parsed，不占 Runtime step。新 executing 尝试占1步，再写 EXECUTING Trace；旧内层 session 恢复 Scanner、委派和 Worker 结果，继续 Lead 评估。&#x27;,stage:&#x27;恢复&#x27;,session:clone(base.session),ctx:&#x27;EXECUTING&#x27;,step:1};restore.work.parsed=parsed;restore.trace.push({step:3,state:&#x27;EXECUTING&#x27;,message:&#x27;Reviewing 1 changed files（恢复后的新尝试）&#x27;});
+ const resumed=snapshots.slice(10).map(v=&gt;{const x=clone(v);x.step=v.step===2?1:2;x.trace=[...clone(restore.trace),...clone(v.trace.filter(t=&gt;t.step&gt;=3)).map(t=&gt;({...t,step:t.step+1}))];return x;});
+ const routes={normal:snapshots,recovery:[...snapshots.slice(0,10),crash,prep,restore,...resumed]};
+ const guides=[
+  [&#x27;GitHub Webhook 正文、X-GitHub-Event、X-Hub-Signature-256、X-GitHub-Delivery。&#x27;, &#x27;事件必须是 pull_request；Secret、签名、updated_at 时间窗口有效；正文可解析。Service 还检查 action、必要 PR 字段、模型配置和仓库授权。&#x27;, &#x27;接收事件并按 Delivery ID 和正文 SHA-256 去重。同一事件重投不会创建第二个任务。&#x27;, &#x27;本步只做入口检查；去重后写 webhook_deliveries。状态表、工作状态与节点 Checkpoint 尚未产生。&#x27;, &#x27;签名错误返回401；事件过期返回409；缺 Secret 返回503。重复 Delivery 返回已有任务引用。&#x27;, &#x27;API → ReviewService&#x27;],
+  [&#x27;已接受的 PR 事件、仓库 full_name、PR 编号、diff_url、issue_url 和租户。&#x27;, &#x27;Service 校验 opened / reopened / synchronize、仓库授权和模型可用。&#x27;, &#x27;生成 task ID，创建 PENDING 任务，并把任务引用与 GitHub URL 放进队列。Webhook 随即响应已接收，不等待评论。&#x27;, &#x27;tasks 保存输入元数据；webhook_deliveries 关联 task ID；Memory 或 Redis 保存队列消息。创建 tasks 本身不追加 PENDING Trace。&#x27;, &#x27;字段非法或仓库未授权时失败；入队失败会向上抛出。任务创建、入队、Delivery 关联不是一个跨系统事务。&#x27;, &#x27;ReviewService.handle_github_pull_request&#x27;],
+  [&#x27;队列消息中的 task_id、repository、pull_request、diff_url。&#x27;, &#x27;任务记录存在；优先检查 task_payloads；需要下载时验证 GitHub 仓库访问，下载后检查非空与大小。&#x27;, &#x27;下载并保存 Diff；后续重试使用已保存的输入，不必每次重新下载。&#x27;, &#x27;task_payloads 保存原始 Diff；tasks.input 更新 diff_pending=false、diff_bytes 和 diff_sha256。队列消息不承担保存全套工作状态的职责。&#x27;, &#x27;无任务或无原始输入为 PermanentTaskError；临时下载失败由队列策略处理。&#x27;, &#x27;ReviewService._process_queued&#x27;],
+  [&#x27;task ID、仓库、PR、tenant_id、原始 Diff，以及当前任务记录。&#x27;, &#x27;如果 SUCCESS 且 report 非空则直接返回；否则读取外层 Checkpoint。Harness 不比较调用方换入的 Diff。&#x27;, &#x27;构造初始工作状态；设置线程局部 task_id、Trace 步号和推断业务阶段；创建3个 RuntimeNode 并调用 execute。&#x27;, &#x27;此步主要创建内存数据，不增加 Checkpoint。线程局部变量不持久化，最终恢复依靠数据库。&#x27;, &#x27;已经成功则不进入 Runtime；恢复必须使用原 task ID 和原输入。&#x27;, &#x27;ReviewHarness.run → AgentRuntime.execute&#x27;],
+  [&#x27;工作状态中的 diff。&#x27;, &#x27;Runtime 尝试前检查取消、总步数和时间。parse_unified_diff 得到的 files 与 added_lines 不能同时为空；注意不是只要无新增行就必定失败。&#x27;, &#x27;解析文件与新增行。业务 _transition 验证 ALLOWED 关系，写 PLANNING，handler 返回 parsed。&#x27;, &#x27;tasks.state、trace_events 已更新；本页刻意显示 handler 返回前的瞬间，工作状态尚未合并 parsed，Checkpoint 尚未保存。&#x27;, &#x27;无效 Diff 的 ValueError 不做节点重试；其他普通异常按 Runtime 策略处理。&#x27;, &#x27;ReviewHarness._planning&#x27;],
+  [&#x27;planning handler 返回的 parsed 字典。&#x27;, &#x27;Runtime 检查返回输出为字典，然后合并。&#x27;, &#x27;parsed 成为后续节点共享的数据。保存外层 planning completed。&#x27;, &#x27;内存 state.parsed；checkpoints 的 planning.state_json 保存 {parsed:…}，status=completed、attempt=1。tasks.state 仍为 PLANNING。&#x27;, &#x27;Checkpoint 写入异常可进入普通重试分支。parsed 必须出现在返回字典，局部变量无法供跨进程恢复。&#x27;, &#x27;AgentRuntime.execute → TaskStore.save_checkpoint&#x27;],
+  [&#x27;diff、parsed、任务配置、模型客户端、工具与记忆配置。&#x27;, &#x27;外层 executing 未 completed；Runtime 检查本次预算和取消。Reviewer 校验模型、Lead 角色和请求的 Agent Skills。仓库 checkout 决定可用工具。&#x27;, &#x27;写 EXECUTING 状态并进入 Reviewer。创建 Execution Ledger，读取内层 session 和历史记忆。&#x27;, &#x27;tasks.state、trace_events 更新；state 仍只有初始字段和 parsed，没有最终 findings。新 session 此时在内存中。&#x27;, &#x27;模型未配置等错误向上抛出；记忆召回失败只记录错误并使用空记忆，不使主审查必然失败。&#x27;, &#x27;ReviewHarness._executing → AgenticReviewer.review_with_context&#x27;],
+  [&#x27;原始 Diff 与 parsed.added_lines；可选声明式 Scanner。&#x27;, &#x27;先查看 session.scanner_complete，已完成就复用；规则只针对其适用文件与新增行。Diff AST 尽量确认危险调用，不等于完整仓库数据流证明。&#x27;, &#x27;规则扫描得到 SEC-EVAL 等候选，合并去重，并补充 Diff AST 引用。此时是候选，不是正式报告 Findings。&#x27;, &#x27;session.scanner_findings、scanner_complete；同一条 agentic-lead-session.state_json 保存 session + execution。外层 state.findings 尚不存在。&#x27;, &#x27;附加 Scanner 异常会记入 Ledger 并继续；Scanner 候选还可能被 Lead 或 Gate 排除。&#x27;, &#x27;AgenticReviewer._scan → _save_lead_session&#x27;],
+  [&#x27;Diff、changed_files、Scanner 候选、可用 Worker、Skills 和历史记忆。&#x27;, &#x27;若 session 已有 delegations 则复用。返回委派需要规范化 Worker、assignment ID、文件和 Skills；未覆盖的启用 Worker 会补默认任务。&#x27;, &#x27;Lead delegate 返回任务分配和风险分类。当前该阶段一次 final，不开放工具。&#x27;, &#x27;session.delegations、lead_delegation、risk_level；覆盖保存 agentic-lead-session，状态仍 in_progress。业务 Trace 不为每个内层阶段加一条。&#x27;, &#x27;非法 JSON 会尝试纠正；仍不能完成该角色时异常上抛，可能触发 executing 重试。&#x27;, &#x27;AgenticReviewer._run_lead / _normalize_delegations&#x27;],
+  [&#x27;每个 assignment、相关 Diff、Scanner 候选、角色 Prompt、证据要求。&#x27;, &#x27;只运行 worker_results 中尚不存在的 assignment；BoundedRole 步骤前检查 Token、时间和步数。工具调用需符合注册表权限及参数约束。&#x27;, &#x27;并发运行 Worker。高风险初始激活最多3步，可选择一个工具或 final；普通风险通常一次 final。模型返回后解析 Findings 并校验新增行位置。&#x27;, &#x27;每个 Worker 返回即更新 session.worker_results，并覆盖内层 Checkpoint。成功或失败都记录。Ledger 保存模型/工具调用、用量和 Agent Trace；不保证完整原始 Prompt/响应落库。&#x27;, &#x27;工具失败成为 Observation；Worker 整体失败变成 status=failed，而不是立即终止全任务。角色错误示例仅教学，真实失败角色未核实。&#x27;, &#x27;AgenticReviewer._run_pending_assignments → BoundedRole.run&#x27;],
+  [&#x27;高风险任务的 assignments、Worker 成败结果、候选与剩余返工轮次。&#x27;, &#x27;普通风险跳过此评估；高风险已有评估就复用。返工 ID 必须来自原委派，Worker 不能更换，指导不能为空。&#x27;, &#x27;Lead assess-workers 决定是否返工。本例教学返回空列表；如需要返工，当前最多1轮，由原 Worker 补充证据，激活最多2步。&#x27;, &#x27;session.lead_assessments；返工结果放 revision_results，同时替换该 assignment 的当前 worker_results；仍保存同一内层 Checkpoint。&#x27;, &#x27;无自动替补 Worker。首次 failed 结果不会因为进入 executing 重试就自动重跑；Lead 返工或新的任务才可能改变它。&#x27;, &#x27;AgenticReviewer._agentic（high_risk 分支）&#x27;],
+  [&#x27;合并去重的 Scanner + 最新 Worker 候选，以及 Lead 的 critic_objective。&#x27;, &#x27;Critic 启用、未完成且存在候选才有模型审查；去掉 source 但保留 rule_id，所以并非完全匿名。&#x27;, &#x27;Critic 对已有索引给出接受、异议和置信度建议，不创建新 Finding。当前一次返回，不开放工具。&#x27;, &#x27;session.critic_decisions、critic_candidates、critic_complete；覆盖保存内层 Checkpoint。置信度建议交给 Lead 统一裁决，不在此反复扣减。&#x27;, &#x27;缺少明确 Decision 的项目默认未接受；反对项不立即删除。没有候选或禁用 Critic 时走默认处理。&#x27;, &#x27;AgenticReviewer._run_critic / _apply_critic&#x27;],
+  [&#x27;带索引的候选、Critic Decisions、最新 Worker Results、原 Diff。&#x27;, &#x27;已有 lead_final 则复用；只接受合法索引，调整值限制范围。当前允许严重等级调整，不能创建新 Finding。&#x27;, &#x27;Lead finalize 决定保留项。缺 accepted_finding_indices 则回退到 Critic 接受项；明确 [] 则保留0项。&#x27;, &#x27;session.lead_final、accepted_findings、phase=completed；agentic-lead-session 标为 completed。注意外层 executing 仍未 completed，业务仍 EXECUTING。&#x27;, &#x27;Lead 接受不等于通过 Gate；无候选也不意味着整个审查已经成功落库。&#x27;, &#x27;AgenticReviewer._apply_lead_final / _save_lead_session&#x27;],
+  [&#x27;Lead 保留候选和 parsed 中真实新增行位置。&#x27;, &#x27;检查字段、位置、精确代码/工具证据/调用链、默认置信度0.55；High/Critical 需要强证据、fix 和 test。&#x27;, &#x27;确定性 Gate 分成 accepted / rejected。弱证据或格式不合格的问题不正式发布。Gate 不请求模型。&#x27;, &#x27;agentic-summary 保存协作、模式、Ledger 统计、Gate 拒绝原因；启用时 agent_memories 保存 Finding 记忆和任务摘要。此刻 findings 还未合并进外层 state。&#x27;, &#x27;Gate 拒绝 Finding 通常不使任务 FAILED。记忆保存异常被忽略，避免影响主审查。调用链校验仍较宽松，不保证逐节点证明关系。&#x27;, &#x27;FindingGate.apply → AgenticReviewer._persist_task_memory&#x27;],
+  [&#x27;Reviewer 返回的最终 accepted Findings。&#x27;, &#x27;节点输出须为字典；成功才标为 completed。&#x27;, &#x27;外层 executing handler 返回 findings，Runtime 合并结果并保存外层 Checkpoint。&#x27;, &#x27;state.findings；checkpoints.executing={findings:…}。内层 session 和摘要保留；tasks.state 仍是 EXECUTING。&#x27;, &#x27;进程从此处恢复可以跳过整个 Reviewer。若只完成内层而没保存外层，则重新进入 Reviewer复用内层成果。&#x27;, &#x27;ReviewHarness._executing → AgentRuntime.execute&#x27;],
+  [&#x27;parsed、最终 findings、Reviewer 协作摘要或持久化 agentic-summary。&#x27;, &#x27;Runtime 的第3次节点尝试前检查取消和预算。序列化数据要可还原；模型协作摘要应可从数据库恢复。&#x27;, &#x27;写 REVIEWING Trace；计算风险与摘要、汇总执行指标，组装 ReviewReport。这里不再发现漏洞。&#x27;, &#x27;tasks.state、trace_events 更新。report 仍是 reviewing 内的产物，尚未写进 tasks.report_json。&#x27;, &#x27;有失败 Worker 且0个正式 Finding 时风险置 unknown，不能把降级无结果宣称为安全。组装普通异常可节点重试。&#x27;, &#x27;ReviewHarness._reviewing&#x27;],
+  [&#x27;reviewing handler 返回的序列化 report。&#x27;, &#x27;Runtime 检查节点输出并保存 Checkpoint。&#x27;, &#x27;将 report 合并到内存工作状态；此时三个外层节点均 completed。&#x27;, &#x27;state.report 和 checkpoints.reviewing.state_json；tasks.report_json 尚未写入，业务仍 REVIEWING。&#x27;, &#x27;此处崩溃后恢复三个节点输出，Harness 再执行 SUCCESS 落库，不必重新运行模型。&#x27;, &#x27;AgentRuntime.execute&#x27;],
+  [&#x27;Runtime 最终工作状态中的 report。&#x27;, &#x27;成功报告可还原为 ReviewReport。SUCCESS 快捷返回要求数据库状态成功且报告存在。&#x27;, &#x27;Harness 调用 Store.succeed，保存最终报告、SUCCESS 和最终业务 Trace。当前代码 _ctx.state 不随 succeed 改成 SUCCESS。&#x27;, &#x27;tasks.state=SUCCESS、tasks.report_json；trace_events 追加 SUCCESS。三个外层及内层 Checkpoint 都保留。&#x27;, &#x27;正常异常走 Harness.fail：tasks.error 最多2000字符，FAILED Trace，并尝试保存 execution_error 失败案例。突然退出无法保证执行收尾。&#x27;, &#x27;ReviewHarness.run → TaskStore.succeed&#x27;],
+  [&#x27;最终报告、GitHub issue 评论地址、auto_post_review 配置与 GitHub 客户端。&#x27;, &#x27;只有提供评论地址且启用自动发布才发评论；检查已有评论中是否有本任务隐藏 Marker。&#x27;, &#x27;找到则更新，没找到则创建。队列 handler 完成后，Redis Worker ACK；本地队列标为处理完成。&#x27;, &#x27;评论在 GitHub；队列状态在 Memory / Redis。任务报告已在数据库，不会因重复发布再调用模型。&#x27;, &#x27;评论失败可以重新投递；任务仍 SUCCESS。队列超过次数进入 DLQ；Redis 消息租约失效可重新领取。Marker 按 task ID 去重，不保证不同任务共用一条评论。&#x27;, &#x27;ReviewService._process_queued → GitHubClient.upsert_comment&#x27;]
+ ];
+ const recoveryGuides={
+  &#x27;模拟：Worker 完成后进程退出&#x27;:[&#x27;内层 Worker 结果已成功写入数据库，外层 executing 还没完成。&#x27;,&#x27;这是突然退出，不经过异常捕获，不能假设写了 FAILED。&#x27;,&#x27;丢弃内存工作状态、线程 _ctx 和本次预算。&#x27;,&#x27;数据库 tasks、trace_events、task_payloads、planning 与 agentic-lead-session 均保留。&#x27;,&#x27;只有重新调度任务才会继续；Memory 队列重启后不会自动保留旧消息。&#x27;,&#x27;进程退出（教学分支）&#x27;],
+  &#x27;恢复：重新进入 Harness.run()&#x27;:[&#x27;同一 task ID 与 task_payloads 中保存的原 Diff。&#x27;,&#x27;SUCCESS + report 快捷判断不成立；根据外层 planning completed 推断 _ctx.state=PLANNING。&#x27;,&#x27;构造新的初始状态，新的 Runtime step=0。数据库状态仍是 EXECUTING，这是上一进程留下的值。&#x27;,&#x27;此时尚未恢复 parsed；Checkpoint 未改变。&#x27;,&#x27;不比较新旧 Diff 哈希。用错误输入和旧 task ID 会误复用结果。&#x27;,&#x27;ReviewService.resume_task → 队列 → ReviewHarness.run&#x27;],
+  &#x27;恢复：跳过 planning，进入 executing&#x27;:[&#x27;新工作状态、planning completed、内层会话 lead-workers-v3。&#x27;,&#x27;planning completed 直接恢复不占step；executing 尚无外层 completed，启动一次新尝试。&#x27;,&#x27;合并 parsed，更新线程状态为 EXECUTING，重新进入 Reviewer并恢复 session 和 Ledger。已存在的 Worker 结果不再重复运行。&#x27;,&#x27;新 EXECUTING Trace；外层 parsed 已恢复，内层成果仍保留。&#x27;,&#x27;新的 step/time 预算；若内层协议不兼容则不恢复该session，可能重做内部审查。&#x27;,&#x27;AgentRuntime.execute → AgenticReviewer._load_lead_session&#x27;]
+ };
+ let route=&#x27;normal&#x27;,index=0;
+ const expansion=new Map();
+ const saved=window.openai?.widgetState?.privateContent;if(saved&amp;&amp;routes[saved.route]&amp;&amp;Number.isInteger(saved.index)){route=saved.route;index=Math.min(Math.max(0,saved.index),routes[route].length-1);if(Array.isArray(saved.expansion))saved.expansion.forEach(([k,v])=&gt;expansion.set(k,!!v));}
+ const json=v=&gt;typeof v===&#x27;string&#x27;?v:JSON.stringify(v,null,2);
+ function cell(value){const td=document.createElement(&#x27;td&#x27;);td.textContent=value;return td;}
+ const missing=Symbol(&#x27;missing&#x27;);
+ const equal=(a,b)=&gt;a===missing||b===missing?a===b:JSON.stringify(a)===JSON.stringify(b);
+ const object=v=&gt;v!==null&amp;&amp;typeof v===&#x27;object&#x27;&amp;&amp;v!==missing;
+ const display=v=&gt;v===missing?&#x27;不存在&#x27;:v===undefined?&#x27;未设置&#x27;:typeof v===&#x27;string&#x27;?v:JSON.stringify(v);
+ function remember(){root.querySelectorAll(&#x27;details[data-ew-path]&#x27;).forEach(d=&gt;expansion.set(d.dataset.ewPath,d.open));}
+ function trackedDetails(key,label){const d=document.createElement(&#x27;details&#x27;),sm=document.createElement(&#x27;summary&#x27;);d.dataset.ewPath=key;d.open=expansion.get(key)||false;sm.textContent=label;d.append(sm);d.addEventListener(&#x27;toggle&#x27;,()=&gt;{expansion.set(key,d.open);});return d;}
+ function tree(value,before,key,label=&#x27;&#x27;){
+   const pre=document.createElement(&#x27;pre&#x27;);pre.className=&#x27;ew-json&#x27;;
+   if(value===missing){const note=document.createElement(&#x27;div&#x27;);note.className=&#x27;ew-before&#x27;;note.textContent=&#x27;此字段已移除；上一快照为：&#x27;;const box=document.createElement(&#x27;div&#x27;);box.append(note,tree(before,missing,key));return box;}
+   const lines=[];
+   function emit(current,old,depth,prefix=&#x27;&#x27;,suffix=&#x27;&#x27;){
+     const indent=&#x27;  &#x27;.repeat(depth),array=Array.isArray(current),names=object(current)?Object.keys(current):[];
+     if(!object(current)||!names.length){lines.push({text:indent+prefix+JSON.stringify(current)+suffix,changed:!equal(current,old)});return;}
+     lines.push({text:indent+prefix+(array?&#x27;[&#x27;:&#x27;{&#x27;),changed:old===missing&amp;&amp;prefix!==&#x27;&#x27;});
+     names.forEach((name,i)=&gt;emit(current[name],object(old)&amp;&amp;Object.hasOwn(old,name)?old[name]:missing,depth+1,array?&#x27;&#x27;:JSON.stringify(name)+&#x27;: &#x27;,i===names.length-1?&#x27;&#x27;:&#x27;,&#x27;));
+     lines.push({text:indent+(array?&#x27;]&#x27;:&#x27;}&#x27;)+suffix,changed:false});
+   }
+   emit(value,before,0,label?JSON.stringify(label)+&#x27;: &#x27;:&#x27;&#x27;);
+   lines.forEach((line,i)=&gt;{const span=document.createElement(&#x27;span&#x27;);span.className=&#x27;ew-json-line&#x27;+(line.changed?&#x27; ew-change&#x27;:&#x27;&#x27;);span.textContent=line.text+(i===lines.length-1?&#x27;&#x27;:&#x27;\n&#x27;);pre.append(span);});return pre;
+ }
+ function detail(value,before=missing,key=&#x27;&#x27;){
+   const td=document.createElement(&#x27;td&#x27;);
+   if(object(value)||typeof value===&#x27;string&#x27;&amp;&amp;value.length&gt;90||value===missing&amp;&amp;object(before)){
+     const count=changes(value,before).length;
+     const size=Array.isArray(value)?value.length+&#x27; 项&#x27;:object(value)?Object.keys(value).length+&#x27; 个字段&#x27;:&#x27;文本&#x27;;
+     const d=trackedDetails(key,&#x27;展开完整 JSON · &#x27;+size+(count?&#x27; · &#x27;+count+&#x27; 处变化&#x27;:&#x27;&#x27;));
+     if(count)d.className=&#x27;ew-has-changes&#x27;;
+     d.append(tree(value,before,key));td.append(d);
+   }else td.append(tree(value,before,key));return td;
+ }
+ function rows(target,entries,previous={},scope=&#x27;&#x27;){
+   target.replaceChildren();const now=Object.fromEntries(entries);
+   const names=Object.keys(now);
+   names.forEach(k=&gt;{const v=Object.hasOwn(now,k)?now[k]:missing;const old=Object.hasOwn(previous||{},k)?previous[k]:missing;const tr=document.createElement(&#x27;tr&#x27;);tr.append(cell(k),detail(v,old,scope+&#x27;/&#x27;+k));target.append(tr);});
+ }
+ function changes(now,before=missing,path=&#x27;&#x27;,out=[]){
+   if(equal(now,before))return out;
+   if(object(now)||object(before)){
+     const a=object(now)?now:{},b=object(before)?before:{};const names=[...new Set([...Object.keys(a),...Object.keys(b)])];
+     if(names.length){names.forEach(k=&gt;changes(Object.hasOwn(a,k)?a[k]:missing,Object.hasOwn(b,k)?b[k]:missing,path+(Array.isArray(a)||Array.isArray(b)?&#x27;[&#x27;+k+&#x27;]&#x27;:(path?&#x27;.&#x27;:&#x27;&#x27;)+k),out));return out;}
+   }
+   out.push({path,kind:before===missing?&#x27;新增&#x27;:now===missing?&#x27;删除&#x27;:&#x27;修改&#x27;,before,now});return out;
+ }
+ function diffView(v,p){
+   const data={business_state:v.db,thread_state:v.ctx,runtime_step:v.step,work:v.work,trace_events:v.trace,checkpoints:v.cp,other:v.other,reviewer_session:v.session};
+   const old=p.title?{business_state:p.db,thread_state:p.ctx,runtime_step:p.step,work:p.work,trace_events:p.trace,checkpoints:p.cp,other:p.other,reviewer_session:p.session}:{};
+   const delta=changes(data,old);el(&#x27;delta&#x27;).replaceChildren();
+   if(!delta.length){el(&#x27;delta&#x27;).textContent=&#x27;本步没有已展示字段变化；流程仍可能进行校验或计算。&#x27;;return;}
+   const text=document.createElement(&#x27;p&#x27;);text.textContent=&#x27;共 &#x27;+delta.length+&#x27; 个字段变化（新增 &#x27;+delta.filter(d=&gt;d.kind===&#x27;新增&#x27;).length+&#x27; / 修改 &#x27;+delta.filter(d=&gt;d.kind===&#x27;修改&#x27;).length+&#x27; / 删除 &#x27;+delta.filter(d=&gt;d.kind===&#x27;删除&#x27;).length+&#x27;）&#x27;;el(&#x27;delta&#x27;).append(text);
+   const d=trackedDetails(&#x27;delta/all&#x27;,&#x27;展开全部具体变更&#x27;);const table=document.createElement(&#x27;table&#x27;);table.className=&#x27;table table-sm&#x27;;const tbody=document.createElement(&#x27;tbody&#x27;);
+   delta.forEach(item=&gt;{const tr=document.createElement(&#x27;tr&#x27;);tr.append(cell(item.kind),cell(item.path),detail(item.now,item.before,&#x27;delta/&#x27;+item.path));tbody.append(tr);});table.append(tbody);d.append(table);el(&#x27;delta&#x27;).append(d);
+   const keyChanges=delta.filter(d=&gt;!d.path.startsWith(&#x27;checkpoints.&#x27;)&amp;&amp;!d.path.startsWith(&#x27;reviewer_session.&#x27;)).slice(0,6);
+   const list=document.createElement(&#x27;div&#x27;);(keyChanges.length?keyChanges:delta.slice(0,6)).forEach(item=&gt;{const line=document.createElement(&#x27;div&#x27;);line.className=&#x27;ew-leaf ew-change&#x27;;line.textContent=item.kind+&#x27; &#x27;+item.path+&#x27;：&#x27;+(item.kind===&#x27;修改&#x27;?display(item.before)+&#x27; → &#x27;:&#x27;&#x27;)+display(item.now);list.append(line);});el(&#x27;delta&#x27;).append(list);
+ }
+ function persist(){remember();window.openai?.setWidgetState?.({modelContent:{example:&#x27;PR #5 / SEC-EVAL 教学演示&#x27;,route,step:index+1,current:routes[route][index].title},privateContent:{route,index,expansion:[...expansion.entries()].filter(([,open])=&gt;open).slice(-100)}})?.catch(()=&gt;{});}
+ function render(){const list=routes[route],v=list[index],p=list[index-1]||{};el(&#x27;count&#x27;).textContent=(index+1)+&#x27; / &#x27;+list.length+(route===&#x27;recovery&#x27;?&#x27; · 中断恢复分支&#x27;:&#x27;&#x27;);el(&#x27;title&#x27;).textContent=v.title;el(&#x27;action&#x27;).textContent=v.action;el(&#x27;status&#x27;).textContent=v.db;el(&#x27;context&#x27;).textContent=v.ctx;el(&#x27;step&#x27;).textContent=v.step;el(&#x27;prev&#x27;).disabled=index===0;el(&#x27;next&#x27;).disabled=index===list.length-1;el(&#x27;crash&#x27;).disabled=route===&#x27;recovery&#x27;;
+ el(&#x27;normal&#x27;).hidden=route!==&#x27;recovery&#x27;;
+ el(&#x27;next&#x27;).textContent=v.title===&#x27;模拟：Worker 完成后进程退出&#x27;?&#x27;开始恢复 →&#x27;:v.title===&#x27;恢复：重新进入 Harness.run()&#x27;?&#x27;恢复数据并继续 →&#x27;:&#x27;下一步 →&#x27;;
+ const progress=Math.round((index+1)/list.length*100);el(&#x27;progress&#x27;).setAttribute(&#x27;aria-valuenow&#x27;,progress);el(&#x27;progress-bar&#x27;).style.width=progress+&#x27;%&#x27;;
+ el(&#x27;jump&#x27;).replaceChildren();list.forEach((item,i)=&gt;{const option=document.createElement(&#x27;option&#x27;);option.value=i;option.textContent=(i+1)+&#x27; · &#x27;+item.title;el(&#x27;jump&#x27;).append(option);});el(&#x27;jump&#x27;).value=index;
+ const originalIndex=snapshots.findIndex(x=&gt;x.title===v.title);const guide=recoveryGuides[v.title]||guides[originalIndex];el(&#x27;guide&#x27;).replaceChildren();if(guide){const table=document.createElement(&#x27;table&#x27;);table.className=&#x27;table&#x27;;const tbody=document.createElement(&#x27;tbody&#x27;);[&#x27;需要什么&#x27;,&#x27;执行前检查&#x27;,&#x27;执行与产出&#x27;,&#x27;保存到哪里&#x27;,&#x27;如果出错 / 关键边界&#x27;,&#x27;对应调用&#x27;].forEach((label,i)=&gt;{const tr=document.createElement(&#x27;tr&#x27;);tr.append(cell(label),cell(guide[i]));tbody.append(tr);});table.append(tbody);el(&#x27;guide&#x27;).append(table);}
+ el(&#x27;road&#x27;).replaceChildren();[&#x27;入口&#x27;,&#x27;准备&#x27;,&#x27;planning&#x27;,&#x27;executing&#x27;,&#x27;reviewing&#x27;,&#x27;完成&#x27;,...(route===&#x27;recovery&#x27;?[&#x27;恢复&#x27;]:[])].forEach((name,i)=&gt;{if(i)el(&#x27;road&#x27;).append(document.createTextNode(&#x27; → &#x27;));const sp=document.createElement(&#x27;span&#x27;);sp.className=&#x27;ew-stage&#x27;+(name===v.stage?&#x27; active&#x27;:&#x27;&#x27;);sp.textContent=name===v.stage?&#x27;● &#x27;+name:name;el(&#x27;road&#x27;).append(sp);});
+ diffView(v,p);
+ rows(el(&#x27;work&#x27;),Object.entries(v.work),p.work,&#x27;work&#x27;);if(!Object.keys(v.work).length&amp;&amp;!Object.keys(p.work||{}).length){el(&#x27;work&#x27;).append(Object.assign(document.createElement(&#x27;tr&#x27;),{innerHTML:&#x27;&lt;td colspan=&quot;2&quot;&gt;尚未创建，或已随进程退出丢失&lt;/td&gt;&#x27;}));}
+ el(&#x27;trace&#x27;).replaceChildren();v.trace.forEach((t,i)=&gt;{const tr=document.createElement(&#x27;tr&#x27;);if(i&gt;=(p.trace||[]).length)tr.className=&#x27;ew-change&#x27;;tr.append(cell(t.step),cell(t.state),cell(t.message));el(&#x27;trace&#x27;).append(tr);});if(!v.trace.length){el(&#x27;trace&#x27;).append(Object.assign(document.createElement(&#x27;tr&#x27;),{innerHTML:&#x27;&lt;td colspan=&quot;3&quot;&gt;暂无状态变化记录&lt;/td&gt;&#x27;}));}
+ el(&#x27;cp&#x27;).replaceChildren();Object.entries(v.cp).forEach(([name,cp])=&gt;{const tr=document.createElement(&#x27;tr&#x27;);const old=p.cp?.[name];tr.append(cell(name),detail({status:cp.status,attempt:cp.attempt},old?{status:old.status,attempt:old.attempt}:missing,&#x27;cp/&#x27;+name+&#x27;/meta&#x27;),detail(cp.state_json,old?old.state_json:missing,&#x27;cp/&#x27;+name+&#x27;/state&#x27;));el(&#x27;cp&#x27;).append(tr);});if(!Object.keys(v.cp).length)el(&#x27;cp&#x27;).append(Object.assign(document.createElement(&#x27;tr&#x27;),{innerHTML:&#x27;&lt;td colspan=&quot;3&quot;&gt;暂无 Checkpoint&lt;/td&gt;&#x27;}));rows(el(&#x27;other&#x27;),Object.entries(v.other),p.other,&#x27;other&#x27;);rows(el(&#x27;session&#x27;),Object.entries(v.session||{}),p.session||{},&#x27;session&#x27;);if(!v.session&amp;&amp;!p.session)el(&#x27;session&#x27;).append(Object.assign(document.createElement(&#x27;tr&#x27;),{innerHTML:&#x27;&lt;td colspan=&quot;2&quot;&gt;尚未创建，或进程退出后尚未恢复&lt;/td&gt;&#x27;}));
+ }
+ el(&#x27;next&#x27;).addEventListener(&#x27;click&#x27;,()=&gt;{remember();index++;render();persist();});el(&#x27;prev&#x27;).addEventListener(&#x27;click&#x27;,()=&gt;{remember();index--;render();persist();});el(&#x27;crash&#x27;).addEventListener(&#x27;click&#x27;,()=&gt;{remember();route=&#x27;recovery&#x27;;index=10;render();persist();});
+ el(&#x27;jump&#x27;).addEventListener(&#x27;change&#x27;,()=&gt;{remember();index=Number(el(&#x27;jump&#x27;).value);render();persist();});
+ el(&#x27;normal&#x27;).addEventListener(&#x27;click&#x27;,()=&gt;{remember();const current=routes[route][index];const same=snapshots.findIndex(v=&gt;v.title===current.title);route=&#x27;normal&#x27;;index=same&gt;=0?same:9;render();persist();});
+ window.addEventListener(&#x27;openai:set_globals&#x27;,e=&gt;{const p=e.detail?.globals?.widgetState?.privateContent;if(p&amp;&amp;routes[p.route]&amp;&amp;Number.isInteger(p.index)){route=p.route;index=Math.min(Math.max(0,p.index),routes[route].length-1);render();}});
+ render();
+})();
+&lt;/script&gt;
+
+&lt;script src=&quot;https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  if (window.FloatingUIDOM == null) {
+    return;
+  }
+  const { autoUpdate, computePosition, flip, offset, shift, size } =
+    window.FloatingUIDOM;
+  const tooltipPlacements = new Set([&quot;top&quot;, &quot;right&quot;, &quot;bottom&quot;, &quot;left&quot;]);
+  const tooltipId = `codex-visualization-tooltip-${
+    window.crypto?.randomUUID?.() ?? Date.now().toString(36)
+  }`;
+  const tooltipGap = 5;
+  const hoverDelay = 700;
+  const skipDelay = 300;
+  let activeTrigger = null;
+  let pendingTrigger = null;
+  let tooltip = null;
+  let openTimeout = null;
+  let autoUpdateCleanup = null;
+  let positionRequest = 0;
+  let skipDelayUntil = 0;
+  let lastPointerWasTouch = false;
+  let pinnedByTouch = false;
+
+  const getTrigger = (event) =&gt; {
+    for (const target of event.composedPath()) {
+      if (target?.nodeType === Node.ELEMENT_NODE) {
+        const trigger = target.closest(&quot;[data-tooltip]&quot;);
+        if (trigger) return trigger;
+      }
+    }
+    return null;
+  };
+  const containsTarget = (trigger, target) =&gt;
+    target?.nodeType != null &amp;&amp; trigger.contains(target);
+  const getContent = (trigger) =&gt;
+    trigger.getAttribute(&quot;data-tooltip&quot;)?.trim() ?? &quot;&quot;;
+  const getPlacement = (trigger) =&gt; {
+    const placement = trigger.getAttribute(&quot;data-tooltip-placement&quot;);
+    return tooltipPlacements.has(placement) ? placement : &quot;top&quot;;
+  };
+  const getTooltip = () =&gt; {
+    if (tooltip == null) {
+      tooltip = document.createElement(&quot;div&quot;);
+      tooltip.id = tooltipId;
+      tooltip.className = &quot;tooltip&quot;;
+      tooltip.setAttribute(&quot;role&quot;, &quot;tooltip&quot;);
+    }
+    return tooltip;
+  };
+  const setDescribedBy = (trigger, described) =&gt; {
+    const ids = new Set(
+      (trigger.getAttribute(&quot;aria-describedby&quot;) ?? &quot;&quot;)
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+    if (described) {
+      ids.add(tooltipId);
+    } else {
+      ids.delete(tooltipId);
+    }
+    if (ids.size === 0) {
+      trigger.removeAttribute(&quot;aria-describedby&quot;);
+    } else {
+      trigger.setAttribute(&quot;aria-describedby&quot;, [...ids].join(&quot; &quot;));
+    }
+  };
+  const clearOpenTimeout = () =&gt; {
+    if (openTimeout != null) {
+      window.clearTimeout(openTimeout);
+      openTimeout = null;
+    }
+    pendingTrigger = null;
+  };
+  const closeTooltip = (activateSkipDelay = true) =&gt; {
+    clearOpenTimeout();
+    pinnedByTouch = false;
+    positionRequest += 1;
+    autoUpdateCleanup?.();
+    autoUpdateCleanup = null;
+    if (activeTrigger == null) {
+      return;
+    }
+    setDescribedBy(activeTrigger, false);
+    activeTrigger = null;
+    tooltip?.remove();
+    if (activateSkipDelay) {
+      skipDelayUntil = Date.now() + skipDelay;
+    }
+  };
+  const updatePosition = (trigger, floating) =&gt; {
+    const request = ++positionRequest;
+    void computePosition(trigger, floating, {
+      middleware: [
+        offset(tooltipGap),
+        flip({ padding: tooltipGap }),
+        shift({ padding: tooltipGap }),
+        size({
+          padding: tooltipGap,
+          apply({ availableHeight, availableWidth, elements }) {
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-width&quot;,
+              `${Math.max(0, availableWidth)}px`,
+            );
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-height&quot;,
+              `${Math.max(0, availableHeight)}px`,
+            );
+          },
+        }),
+      ],
+      placement: getPlacement(trigger),
+      strategy: &quot;fixed&quot;,
+    })
+      .then(({ x, y }) =&gt; {
+        if (activeTrigger !== trigger || request !== positionRequest) {
+          return;
+        }
+        const scale = window.devicePixelRatio || 1;
+        floating.style.transform = `translate(${Math.round(x * scale) / scale}px, ${Math.round(y * scale) / scale}px)`;
+        floating.style.visibility = &quot;visible&quot;;
+      })
+      .catch(() =&gt; {
+        if (activeTrigger === trigger &amp;&amp; request === positionRequest) {
+          closeTooltip(false);
+        }
+      });
+  };
+  const openTooltip = (trigger) =&gt; {
+    const content = getContent(trigger);
+    if (!trigger.isConnected || content.length === 0) {
+      return;
+    }
+    clearOpenTimeout();
+    if (activeTrigger === trigger) {
+      return;
+    }
+    closeTooltip();
+    const floating = getTooltip();
+    floating.textContent = content;
+    floating.style.visibility = &quot;hidden&quot;;
+    floating.style.transform = &quot;translate(0, 0)&quot;;
+    document.body.appendChild(floating);
+    activeTrigger = trigger;
+    setDescribedBy(trigger, true);
+    autoUpdateCleanup = autoUpdate(trigger, floating, () =&gt; {
+      updatePosition(trigger, floating);
+    });
+  };
+  const requestOpen = (trigger, immediate = false) =&gt; {
+    if (
+      getContent(trigger).length === 0 ||
+      activeTrigger === trigger ||
+      pendingTrigger === trigger
+    ) {
+      return;
+    }
+    clearOpenTimeout();
+    pendingTrigger = trigger;
+    const delay =
+      immediate || activeTrigger != null || Date.now() &lt; skipDelayUntil
+        ? 0
+        : hoverDelay;
+    if (delay === 0) {
+      openTooltip(trigger);
+      return;
+    }
+    openTimeout = window.setTimeout(() =&gt; {
+      openTimeout = null;
+      pendingTrigger = null;
+      openTooltip(trigger);
+    }, delay);
+  };
+  const handlePointerOpen = (event) =&gt; {
+    if (event.pointerType === &quot;touch&quot;) {
+      return;
+    }
+    const trigger = getTrigger(event);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    requestOpen(trigger);
+  };
+  const handlePointer = (event) =&gt; {
+    lastPointerWasTouch =
+      event.type === &quot;pointerdown&quot; &amp;&amp; event.pointerType === &quot;touch&quot;;
+  };
+  const handleTouchClick = (event) =&gt; {
+    const isTouch = event.pointerType === &quot;touch&quot; || lastPointerWasTouch;
+    lastPointerWasTouch = false;
+    if (!isTouch || event.detail === 0) {
+      return;
+    }
+    const trigger = getTrigger(event);
+    if (
+      trigger == null ||
+      !trigger.isConnected ||
+      getContent(trigger).length === 0 ||
+      (pinnedByTouch &amp;&amp; activeTrigger === trigger)
+    ) {
+      if (pinnedByTouch) {
+        closeTooltip();
+      }
+      return;
+    }
+    openTooltip(trigger);
+    pinnedByTouch = activeTrigger === trigger;
+    window.setTimeout(() =&gt; {
+      if (activeTrigger === trigger &amp;&amp; !trigger.isConnected) {
+        closeTooltip(false);
+      }
+    }, 0);
+  };
+  const handleLeave = (event) =&gt; {
+    if (pinnedByTouch) {
+      return;
+    }
+    const trigger = getTrigger(event);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const handleFocusIn = (event) =&gt; {
+    const trigger = getTrigger(event);
+    if (trigger?.matches(&quot;:focus-visible&quot;)) {
+      requestOpen(trigger, true);
+    }
+  };
+  const handleKeyDown = (event) =&gt; {
+    if (event.key === &quot;Escape&quot;) {
+      closeTooltip();
+    }
+  };
+  const handleContextMenu = (event) =&gt; {
+    lastPointerWasTouch = false;
+    const trigger = getTrigger(event);
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const handlers = {
+    pointerover: handlePointerOpen,
+    pointerdown: handlePointer,
+    pointercancel: handlePointer,
+    click: handleTouchClick,
+    pointerout: handleLeave,
+    focusin: handleFocusIn,
+    focusout: handleLeave,
+    keydown: handleKeyDown,
+    contextmenu: handleContextMenu,
+  };
+  const roots = new Map();
+  const handledEvents = new WeakSet();
+  const handleEvent = (event) =&gt; {
+    if (handledEvents.has(event)) return;
+    handledEvents.add(event);
+    handlers[event.type](event);
+  };
+  const discoverRoots = (node) =&gt; {
+    if (node.shadowRoot) listen(node.shadowRoot);
+    for (const element of node.querySelectorAll(&quot;*&quot;)) {
+      if (element.shadowRoot) listen(element.shadowRoot);
+    }
+  };
+  const listen = (root) =&gt; {
+    if (roots.has(root)) return;
+    for (const type of Object.keys(handlers)) root.addEventListener(type, handleEvent);
+    const observer = new window.MutationObserver((records) =&gt; {
+      for (const { addedNodes } of records) {
+        for (const node of addedNodes) {
+          if (node.nodeType === Node.ELEMENT_NODE) discoverRoots(node);
+        }
+      }
+      for (const [root, cleanup] of roots) {
+        if (root.host &amp;&amp; !root.host.isConnected) {
+          cleanup();
+          roots.delete(root);
+        }
+      }
+      if (activeTrigger &amp;&amp; !activeTrigger.isConnected) closeTooltip(false);
+    });
+    observer.observe(root, { childList: true, subtree: true });
+    roots.set(root, () =&gt; {
+      observer.disconnect();
+      for (const type of Object.keys(handlers)) root.removeEventListener(type, handleEvent);
+    });
+    discoverRoots(root);
+  };
+  const destroy = () =&gt; {
+    closeTooltip(false);
+    lastPointerWasTouch = false;
+    for (const cleanup of roots.values()) cleanup();
+    roots.clear();
+    tooltip = null;
+  };
+
+  // Events between children of one shadow root never reach the document.
+  listen(document);
+  window.addEventListener(&quot;pagehide&quot;, destroy, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-tabs&quot;&gt;
+(() =&gt; {
+  const selector = &#x27;.nav[role=&quot;tablist&quot;] [role=&quot;tab&quot;]&#x27;;
+  const disabled = &#x27;:disabled,[aria-disabled=&quot;true&quot;]&#x27;;
+  const selectTab = (selected) =&gt; {
+    const panelId = selected.getAttribute(&quot;aria-controls&quot;);
+    for (const tab of selected.closest(&#x27;[role=&quot;tablist&quot;]&#x27;).querySelectorAll(&#x27;[role=&quot;tab&quot;]&#x27;)) {
+      const active = tab === selected;
+      tab.classList.toggle(&quot;active&quot;, active);
+      tab.setAttribute(&quot;aria-selected&quot;, String(active));
+      const id = tab.getAttribute(&quot;aria-controls&quot;);
+      const panel = id &amp;&amp; document.getElementById(id);
+      if (panel != null) {
+        panel.hidden = id !== panelId;
+        if (!panel.hidden &amp;&amp; selected.id) {
+          panel.setAttribute(&quot;aria-labelledby&quot;, selected.id);
+        }
+      }
+    }
+  };
+  const interact = (event) =&gt; {
+    const tab = event.target?.closest?.(selector);
+    if (event.defaultPrevented || tab == null || tab.matches(disabled)) {
+      return;
+    }
+    if (event.type === &quot;click&quot;) {
+      selectTab(tab);
+      return;
+    }
+    const tabs = Array.from(
+      tab.closest(&#x27;[role=&quot;tablist&quot;]&#x27;).querySelectorAll(&#x27;[role=&quot;tab&quot;]&#x27;),
+    ).filter((candidate) =&gt; !candidate.matches(disabled));
+    const current = tabs.indexOf(tab);
+    let next;
+    if (event.key === &quot;ArrowRight&quot; || event.key === &quot;ArrowDown&quot;) {
+      next = (current + 1) % tabs.length;
+    } else if (event.key === &quot;ArrowLeft&quot; || event.key === &quot;ArrowUp&quot;) {
+      next = (current + tabs.length - 1) % tabs.length;
+    } else if (event.key === &quot;Home&quot;) {
+      next = 0;
+    } else if (event.key === &quot;End&quot;) {
+      next = tabs.length - 1;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    tabs[next].focus();
+    selectTab(tabs[next]);
+  };
+
+  for (const list of document.querySelectorAll(&#x27;.nav[role=&quot;tablist&quot;]&#x27;)) {
+    const selected =
+      list.querySelector(&#x27;[role=&quot;tab&quot;][aria-selected=&quot;true&quot;]&#x27;) ??
+      list.querySelector(&#x27;[role=&quot;tab&quot;].active&#x27;) ??
+      list.querySelector(&#x27;[role=&quot;tab&quot;]&#x27;);
+    if (selected != null) {
+      selectTab(selected);
+    }
+  }
+  document.addEventListener(&quot;click&quot;, interact);
+  document.addEventListener(&quot;keydown&quot;, interact);
+  window.addEventListener(&quot;pagehide&quot;, () =&gt; {
+    document.removeEventListener(&quot;click&quot;, interact);
+    document.removeEventListener(&quot;keydown&quot;, interact);
+  }, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-carousel&quot;&gt;
+  (() =&gt; {
+    for (const root of document.querySelectorAll(&quot;.viz-carousel&quot;)) {
+      const panels = Array.from(
+        root.querySelectorAll(&quot;:scope &gt; [data-variant]&quot;),
+      );
+      if (panels.length === 0) {
+        continue;
+      }
+      root.setAttribute(&quot;role&quot;, &quot;group&quot;);
+      panels.forEach((panel, index) =&gt; {
+        panel.hidden = index !== 0;
+        panel.setAttribute(&quot;role&quot;, &quot;group&quot;);
+        if (!panel.hasAttribute(&quot;aria-label&quot;)) {
+          panel.setAttribute(&quot;aria-label&quot;, panel.dataset.variant);
+        }
+      });
+      root.dataset.activeVariant = panels[0].dataset.variant;
+      if (panels.length === 1) {
+        continue;
+      }
+
+      const controls = document.createElement(&quot;div&quot;);
+      controls.className = &quot;viz-carousel-controls&quot;;
+      // Portable copy of the settings dropdown&#x27;s legacy glyph; no 14px icon-package preset matches it.
+      // https://github.com/openai/openai/blob/master/codex/codex-apps/webview/src/icons/chevron.svg
+      controls.innerHTML = `
+      &lt;button type=&quot;button&quot; class=&quot;viz-carousel-previous cursor-interaction&quot;&gt;&lt;i data-lucide=&quot;chevron-left&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;&lt;/button&gt;
+      &lt;details class=&quot;viz-carousel-picker&quot;&gt;
+        &lt;summary class=&quot;cursor-interaction&quot;&gt;
+          &lt;span class=&quot;viz-carousel-count tabular-nums&quot;&gt;&lt;/span&gt;
+          &lt;span class=&quot;viz-carousel-name&quot;&gt;&lt;/span&gt;
+          &lt;svg class=&quot;viz-carousel-caret&quot; width=&quot;14&quot; height=&quot;14&quot; viewBox=&quot;0 0 20 21&quot; fill=&quot;none&quot; aria-hidden=&quot;true&quot; focusable=&quot;false&quot;&gt;
+            &lt;path d=&quot;M15.2793 7.71101C15.539 7.45131 15.961 7.45131 16.2207 7.71101C16.4804 7.97071 16.4804 8.39272 16.2207 8.65242L10.4707 14.4024C10.211 14.6621 9.78902 14.6621 9.52932 14.4024L3.77932 8.65242L3.69436 8.54792C3.52385 8.28979 3.55205 7.93828 3.77932 7.71101C4.00659 7.48374 4.3581 7.45554 4.61623 7.62605L4.72073 7.71101L10 12.9903L15.2793 7.71101Z&quot; fill=&quot;currentColor&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;0.6&quot; /&gt;
+          &lt;/svg&gt;
+        &lt;/summary&gt;
+        &lt;div class=&quot;viz-carousel-options&quot;&gt;&lt;/div&gt;
+      &lt;/details&gt;
+      &lt;button type=&quot;button&quot; class=&quot;viz-carousel-next cursor-interaction&quot;&gt;&lt;i data-lucide=&quot;chevron-right&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;&lt;/button&gt;`;
+      const previous = controls.querySelector(&quot;.viz-carousel-previous&quot;);
+      const next = controls.querySelector(&quot;.viz-carousel-next&quot;);
+      const picker = controls.querySelector(&quot;.viz-carousel-picker&quot;);
+      const summary = picker.querySelector(&quot;summary&quot;);
+      const count = controls.querySelector(&quot;.viz-carousel-count&quot;);
+      const name = controls.querySelector(&quot;.viz-carousel-name&quot;);
+      const options = controls.querySelector(&quot;.viz-carousel-options&quot;);
+      const status = document.createElement(&quot;span&quot;);
+      status.className = &quot;sr-only&quot;;
+      status.setAttribute(&quot;role&quot;, &quot;status&quot;);
+      status.setAttribute(&quot;aria-live&quot;, &quot;polite&quot;);
+      status.setAttribute(&quot;aria-atomic&quot;, &quot;true&quot;);
+      previous.setAttribute(
+        &quot;aria-label&quot;,
+        root.dataset.previousLabel ?? &quot;Previous variant&quot;,
+      );
+      next.setAttribute(&quot;aria-label&quot;, root.dataset.nextLabel ?? &quot;Next variant&quot;);
+
+      let active = 0;
+      let mousePointerId = null;
+      let summaryPointerHandled = false;
+      summary.addEventListener(&quot;pointerdown&quot;, (event) =&gt; {
+        summaryPointerHandled =
+          event.pointerType === &quot;mouse&quot; &amp;&amp; event.button === 0 &amp;&amp; !event.ctrlKey;
+        if (!summaryPointerHandled) {
+          return;
+        }
+        event.preventDefault();
+        summary.focus({ preventScroll: true });
+        picker.open = !picker.open;
+        mousePointerId = picker.open ? event.pointerId : null;
+      });
+      summary.addEventListener(&quot;click&quot;, (event) =&gt; {
+        if (summaryPointerHandled &amp;&amp; event.detail &gt; 0) {
+          event.preventDefault();
+        }
+      });
+      const choices = panels.map((panel, index) =&gt; {
+        const choice = document.createElement(&quot;button&quot;);
+        choice.type = &quot;button&quot;;
+        choice.className = &quot;cursor-interaction&quot;;
+        choice.textContent = panel.dataset.variant;
+        choice.addEventListener(&quot;click&quot;, () =&gt; {
+          select(index);
+          summary.focus();
+        });
+        choice.addEventListener(&quot;pointerup&quot;, (event) =&gt; {
+          if (
+            picker.open &amp;&amp;
+            event.pointerType === &quot;mouse&quot; &amp;&amp;
+            event.button === 0 &amp;&amp;
+            event.pointerId === mousePointerId
+          ) {
+            choice.click();
+          }
+        });
+        options.appendChild(choice);
+        return choice;
+      });
+      const select = (index) =&gt; {
+        const changed = active !== index;
+        active = index;
+        panels.forEach((panel, position) =&gt; {
+          panel.hidden = position !== active;
+          choices[position].setAttribute(
+            &quot;aria-current&quot;,
+            String(position === active),
+          );
+        });
+        root.dataset.activeVariant = panels[active].dataset.variant;
+        count.textContent = `${active + 1} / ${panels.length}`;
+        name.textContent = panels[active].dataset.variant;
+        picker.open = false;
+        mousePointerId = null;
+        if (changed) {
+          status.textContent = `${count.textContent}: ${name.textContent}`;
+        }
+      };
+      previous.addEventListener(&quot;click&quot;, () =&gt;
+        select((active + panels.length - 1) % panels.length),
+      );
+      next.addEventListener(&quot;click&quot;, () =&gt;
+        select((active + 1) % panels.length),
+      );
+      picker.addEventListener(&quot;keydown&quot;, (event) =&gt; {
+        if (event.key === &quot;Escape&quot; &amp;&amp; picker.open) {
+          event.preventDefault();
+          picker.open = false;
+          mousePointerId = null;
+          summary.focus();
+          return;
+        }
+        if (event.altKey || event.ctrlKey || event.metaKey) {
+          return;
+        }
+        const index = choices.indexOf(document.activeElement);
+        let nextIndex;
+        if (event.key === &quot;ArrowDown&quot;) {
+          nextIndex = index &lt; 0 ? active : (index + 1) % choices.length;
+        } else if (event.key === &quot;ArrowUp&quot;) {
+          nextIndex = index &lt; 0 ? active : (index + choices.length - 1) % choices.length;
+        } else if (picker.open &amp;&amp; event.key === &quot;Home&quot;) {
+          nextIndex = 0;
+        } else if (picker.open &amp;&amp; event.key === &quot;End&quot;) {
+          nextIndex = choices.length - 1;
+        } else {
+          return;
+        }
+        event.preventDefault();
+        picker.open = true;
+        choices[nextIndex].focus();
+      });
+      picker.addEventListener(&quot;focusout&quot;, (event) =&gt; {
+        if (!picker.contains(event.relatedTarget)) {
+          picker.open = false;
+          mousePointerId = null;
+        }
+      });
+      const dismiss = (event) =&gt; {
+        if (!summary.contains(event.target)) {
+          mousePointerId = null;
+        }
+        if (!picker.contains(event.target)) {
+          picker.open = false;
+        }
+      };
+      const endPointerSelection = () =&gt; {
+        mousePointerId = null;
+      };
+      const sizePicker = () =&gt; {
+        root.style.setProperty(
+          &quot;--viz-carousel-picker-height&quot;,
+          `${picker.open ? options.offsetHeight : 0}px`,
+        );
+      };
+      picker.addEventListener(&quot;toggle&quot;, sizePicker);
+      window.addEventListener(&quot;resize&quot;, sizePicker);
+      document.addEventListener(&quot;pointerdown&quot;, dismiss);
+      document.addEventListener(&quot;pointerup&quot;, endPointerSelection);
+      document.addEventListener(&quot;pointercancel&quot;, endPointerSelection);
+      window.addEventListener(&quot;blur&quot;, endPointerSelection);
+      window.addEventListener(
+        &quot;pagehide&quot;,
+        () =&gt; {
+          document.removeEventListener(&quot;pointerdown&quot;, dismiss);
+          document.removeEventListener(&quot;pointerup&quot;, endPointerSelection);
+          document.removeEventListener(&quot;pointercancel&quot;, endPointerSelection);
+          window.removeEventListener(&quot;blur&quot;, endPointerSelection);
+          window.removeEventListener(&quot;resize&quot;, sizePicker);
+        },
+        { once: true },
+      );
+      root.append(controls, status);
+      select(0);
+    }
+  })();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-lucide&quot; async src=&quot;https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  const initialize = () =&gt; {
+    globalThis.lucide?.createIcons({ attrs: { width: 16, height: 16 } });
+  };
+  if (globalThis.lucide != null) {
+    initialize();
+    return;
+  }
+  document
+    .getElementById(&quot;codex-visualization-lucide&quot;)
+    ?.addEventListener(&quot;load&quot;, initialize, { once: true });
+})();
+&lt;/script&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+"></iframe>
+<script>(() => {
+  const frame = document.getElementById("codex-visualization");
+  if (!(frame instanceof HTMLIFrameElement)) {
+    return;
+  }
+  let viewportHeight = globalThis.innerHeight;
+  const storageKey = `codex:visualization-widget-state-v2:${JSON.stringify([
+    globalThis.location.pathname,
+    globalThis.location.search,
+  ])}`;
+  const parseState = (serializedState) => {
+    if (
+      typeof serializedState !== "string" ||
+      new TextEncoder().encode(serializedState).length > 16 * 1024
+    ) {
+      throw new TypeError(
+        "Widget state must be a JSON object of at most 16 KiB",
+      );
+    }
+    /** @type {unknown} */
+    const state = JSON.parse(serializedState);
+    if (
+      state == null ||
+      typeof state !== "object" ||
+      Array.isArray(state) ||
+      ("imageIds" in state &&
+        (!Array.isArray(state.imageIds) || state.imageIds.length > 0))
+    ) {
+      throw new TypeError("Widget state must be a JSON object");
+    }
+    const storedState = { modelContent: null, privateContent: null, ...state };
+    const canonicalState = JSON.stringify(
+      storedState,
+      (_key, /** @type {unknown} */ value) => {
+        if (typeof value === "number" && !Number.isFinite(value)) {
+          throw new TypeError("Widget state must contain finite numbers");
+        }
+        return value;
+      },
+    );
+    if (new TextEncoder().encode(canonicalState).length > 16 * 1024) {
+      throw new TypeError(
+        "Widget state must be a JSON object of at most 16 KiB",
+      );
+    }
+    return storedState;
+  };
+  let storage = null;
+  let state = null;
+  try {
+    const localStorage = globalThis.localStorage;
+    const probeKey = `${storageKey}:probe`;
+    localStorage.setItem(probeKey, "1");
+    localStorage.removeItem(probeKey);
+    storage = localStorage;
+    const savedState = storage.getItem(storageKey);
+    if (savedState != null) {
+      try {
+        state = parseState(savedState);
+      } catch {
+        // Invalid saved state does not disable future writes.
+      }
+    }
+  } catch {
+    storage = null;
+  }
+  const initialGlobals = {
+    widgetState: state,
+    statePersistence: storage == null ? "none" : "local",
+  };
+
+  const channel = new MessageChannel();
+  channel.port1.addEventListener("message", (event) => {
+    const data = event.data;
+    if (typeof data !== "object" || data == null) {
+      return;
+    }
+    if (data.type === "widget-state-write") {
+      if (!Number.isSafeInteger(data.id) || data.id <= 0) {
+        return;
+      }
+      let ok = false;
+      try {
+        if (storage != null) {
+          const state = parseState(data.state);
+          storage.setItem(storageKey, JSON.stringify(state));
+          ok = true;
+        }
+      } catch {
+        // Storage denial, quota limits, and invalid state return a failed receipt.
+      }
+      channel.port1.postMessage({
+        type: "widget-state-result",
+        id: data.id,
+        ok,
+      });
+      return;
+    }
+    if (data.type === "height") {
+      const height = data.height;
+      if (
+        typeof height === "number" &&
+        Number.isFinite(height) &&
+        height >= 0 &&
+        height <= 10_000
+      ) {
+        frame.style.height = Math.ceil(height) + "px";
+      }
+      return;
+    }
+    if (data.type === "scroll-to") {
+      const top = data.top;
+      if (
+        typeof top === "number" &&
+        Number.isFinite(top) &&
+        top >= 0 &&
+        globalThis.navigator.userActivation?.isActive === true
+      ) {
+        globalThis.scrollTo({
+          top: Math.ceil(
+            globalThis.scrollY + frame.getBoundingClientRect().top + top,
+          ),
+        });
+      }
+      return;
+    }
+    if (data.type === "open-external") {
+      const rawHref = data.href;
+      if (typeof rawHref !== "string") {
+        return;
+      }
+      let href;
+      try {
+        const url = new URL(rawHref, document.baseURI);
+        if (url.protocol !== "https:") {
+          return;
+        }
+        href = url.href;
+      } catch {
+        return;
+      }
+      if (globalThis.navigator.userActivation?.isActive === true) {
+        const anchor = document.createElement("a");
+        anchor.href = href;
+        anchor.rel = "noopener noreferrer";
+        anchor.target = "_blank";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      }
+      return;
+    }
+    if (data.type === "follow-up") {
+      const prompt = data.prompt;
+      if (
+        typeof prompt !== "string" ||
+        globalThis.navigator.userActivation?.isActive !== true
+      ) {
+        return;
+      }
+      const title = data.title;
+      globalThis.prompt(typeof title === "string" ? title : prompt, prompt);
+    }
+  });
+  channel.port1.start();
+  const srcdoc = frame.dataset.srcdoc;
+  if (srcdoc == null) {
+    return;
+  }
+  globalThis.addEventListener("resize", () => {
+    const height = Number.parseFloat(frame.style.height);
+    if (!Number.isFinite(height) || height <= viewportHeight) {
+      frame.style.removeProperty("height");
+    }
+    viewportHeight = globalThis.innerHeight;
+    channel.port1.postMessage({ type: "measure" });
+  });
+  frame.addEventListener(
+    "load",
+    () => {
+      frame.contentWindow?.postMessage(
+        { type: "codex-visualization-initialize" },
+        "*",
+        [channel.port2],
+      );
+    },
+    { once: true },
+  );
+  // Match the trusted bootstrap element, not the same text in an authored title.
+  frame.srcdoc = srcdoc.replace(
+    '<script type="application/json" id="codex-visualization-widget-state">__CODEX_VISUALIZATION_WIDGET_STATE__<\/script>',
+    () =>
+      '<script type="application/json" id="codex-visualization-widget-state">' +
+      JSON.stringify(initialGlobals).replaceAll("<", "\\u003c") +
+      "<\/script>",
+  );
+  delete frame.dataset.srcdoc;
+})();
+</script>
+</body>
+</html>
